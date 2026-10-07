@@ -45,7 +45,7 @@ CONFIG=debug scripts/bundle.sh        # 確認用の debug ビルド (速い)
 ```sh
 APP=build/kotokoto-im.app/Contents/MacOS/kotokoto-im
 $APP --list     # 有効な入力ソース ID の確認
-$APP --bench    # 切り替えにかかる時間を測る
+$APP --bench    # 切り替えが着くまでの時間を遷移ごとに測る (docs/ime-delay.md)
 $APP --reset    # 強制終了で残った Caps Lock の割り当てを戻す
 swift test
 ```
@@ -73,7 +73,7 @@ Caps Lock を押してから切り替わるまでの経路で、次のことを�
 - 切り替え直後〜入力先が使えるようになるまでの短い間(通知から約 30 ms、最長 0.3 秒)に打ったキーを預かり、準備ができてから元の順序で送り直す。macOS は入力ソースの切り替えを通知してから、入力先アプリの入力メソッドが実際に使えるようになるまで少し間があり、その間のキーは切り替え前の入力ソースに届くため(gksdud と同じ対策)。
 - 切り替え要求の経路ではメニュー更新などをしない(警告が変わったときだけ更新)。
 
-実測は `--bench`(各言語の切り替え時間と、覚えた場合の引き当て時間)で確認できます。OS 側の切り替え(`TISSelectInputSource`)自体の時間はこのツールでは縮められません。
+切り替えが着くまでの時間は `--bench` で遷移ごとに測れます。OS 側の切り替え(`TISSelectInputSource`)自体の時間はこのツールでは縮められません。遅延の調査メモは [docs/ime-delay.md](docs/ime-delay.md)。
 
 ## 設定
 

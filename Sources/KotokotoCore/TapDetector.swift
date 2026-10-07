@@ -1,5 +1,5 @@
 /// 切り替え先の言語。
-public enum Language: String, Equatable {
+public enum Language: String, Equatable, CaseIterable {
     case english
     case japanese
     case korean
