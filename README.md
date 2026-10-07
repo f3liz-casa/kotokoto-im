@@ -53,7 +53,7 @@ swift test
 `scripts/bundle.sh` は ad-hoc 署名をするので、再ビルドすると許可をやり直すことがあります(`CODESIGN_IDENTITY` に自分の証明書名を渡すと固定できます)。
 
 初回起動時に **アクセシビリティ**(場合により **入力監視**)の許可が必要です。メニューのリンクから設定画面を開けます。
-システム設定 > キーボード > 入力ソース で、英語(ABC/US)・日本語(ローマ字入力)・韓国語(2 セット)を追加しておいてください。
+システム設定 > キーボード > 入力ソース で、英語(ABC/US)・日本語(ローマ字入力、または Mozc / Google 日本語入力)・韓国語(2 セット)を追加しておいてください。日本語の入力ソースを複数入れている場合は、標準の日本語入力 → Mozc → Google 日本語入力の順に使います。Mozc を優先したいときは設定の `inputSources` で指定します(下記)。
 
 ## 速さ
 
@@ -76,7 +76,7 @@ Caps Lock を押してから切り替わるまでの経路で、次のことを�
   "leftCommand": "english",
   "rightCommand": "japanese",
   "maxTapDuration": 0.5,
-  "inputSources": { "korean": ["com.apple.inputmethod.Korean.3SetKorean"] }
+  "inputSources": { "japanese": ["org.mozc.inputmethod.Japanese.base"] }
 }
 ```
 
