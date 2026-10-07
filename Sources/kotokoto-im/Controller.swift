@@ -1,6 +1,5 @@
 import AppKit
 import ApplicationServices
-import Carbon
 import KotokotoCore
 
 /// メニューバー常駐の本体。普段は静かで、困ったときだけメニューに理由と次の一手を出す。
@@ -21,38 +20,40 @@ final class Controller: NSObject, NSApplicationDelegate {
     private let hintLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let settingsItem = NSMenuItem(title: "", action: #selector(openPrivacySettings), keyEquivalent: "")
 
+    // 設定と状態
     private var config = Config()
     private var configWarning: String?
     private var switchWarning: String?
     private var state: State = .needsAccessibility
-    private var tap: EventTap?
-    private var remapped = false
-    private var remapGeneration = 0
-    private let remapDelay = 1.0       // タップ開始から Caps Lock を差し替えるまでの待ち (秒)
-    private var suspendStamps: [UInt64] = []
-    private var pollTimer: Timer?
-    private var timeoutStamps: [UInt64] = []
-    private var healthTimer: Timer?
     private var settingsURL = ""
     private var askedForAccessibility = false
 
-    private let settleInterval = 0.08  // これより短い間隔の切り替えはまとめる (秒)
-    private let verifyDelay = 0.06     // 切り替え後にこの時間待って確認する (秒)
-    private var lastSwitchAt = DispatchTime(uptimeNanoseconds: 0)
-    private var pendingSwitch: DispatchWorkItem?
-    private var generation = 0
+    // 切り替え
+    private let switcher = Switcher()
+    private var tap: EventTap?
 
-    private let landingDelay = 0.03    // 切り替えの通知から、入力先が使えるようになるまでの余裕 (秒)
-    private let holdTimeout = 0.3      // 通知が来なくてもキーを預かるのはこの時間まで (秒)
-    private var holdGeneration = 0
-    private var holdTarget: (language: Language, preferred: [String])?
+    // Caps Lock の差し替え
+    private var remapped = false
+    private var remapGeneration = 0    // 取り消したい差し替えを無効にする
+    private let remapDelay = 1.0       // タップ開始から Caps Lock を差し替えるまでの待ち (秒)
+
+    // 権限と、システムにタップを止められたときの対処
+    private var pollTimer: Timer?
+    private var healthTimer: Timer?
+    private var timeoutStamps: [UInt64] = []
+    private var suspendStamps: [UInt64] = []
+
+    private static let accessibilityURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+    private static let inputMonitoringURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
         InputSources.observeChanges()
-        DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
-            object: nil, queue: .main) { [weak self] _ in self?.inputSourceChanged() }
+        switcher.onWarning = { [weak self] warning in
+            guard let self = self, warning != self.switchWarning else { return }
+            self.switchWarning = warning
+            self.refresh()
+        }
         reload()
     }
 
@@ -72,6 +73,7 @@ final class Controller: NSObject, NSApplicationDelegate {
         teardown()
         InputSources.invalidate()
         loadConfig()
+        switcher.config = config
         if !tryStart() { startPolling() }
         refresh()
     }
@@ -82,9 +84,10 @@ final class Controller: NSObject, NSApplicationDelegate {
         pollTimer = nil
         healthTimer?.invalidate()
         healthTimer = nil
-        tap?.endHold()
+        switcher.cancelAll() // 預かっているキーを返してから、タップを止める
         tap?.stop()
         tap = nil
+        switcher.tap = nil
         if remapped {
             if wait { CapsLockRemap.disableAndWait() } else { CapsLockRemap.disable() }
             remapped = false
@@ -94,14 +97,15 @@ final class Controller: NSObject, NSApplicationDelegate {
     private func loadConfig() {
         configWarning = nil
         config = Config()
-        Trace.enabled = false
-        defer { if config.trace { Trace.enabled = true; Trace.log("--- 起動 / 設定を読み込み (trace 有効) ---") } }
-        guard let data = try? Data(contentsOf: Self.configURL) else { return } // 無ければ既定値
-        do {
-            config = try Config.parse(data)
-        } catch {
-            configWarning = "設定ファイルを読めなかったので既定値で動いています (\(error))"
+        if let data = try? Data(contentsOf: Self.configURL) { // 無ければ既定値
+            do {
+                config = try Config.parse(data)
+            } catch {
+                configWarning = "設定ファイルを読めなかったので既定値で動いています (\(error))"
+            }
         }
+        Trace.enabled = config.trace
+        Trace.log("--- 起動 / 設定を読み込み (trace 有効) ---")
     }
 
     /// 権限が揃っていれば開始する。揃っていなければ state を更新して false。
@@ -113,18 +117,19 @@ final class Controller: NSObject, NSApplicationDelegate {
                 _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
             }
             state = .needsAccessibility
-            settingsURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            settingsURL = Self.accessibilityURL
             return false
         }
         let t = EventTap(config: config,
-                         onSwitch: { [weak self] lang in self?.switchTo(lang) },
+                         onSwitch: { [weak self] lang in self?.switcher.request(lang) },
                          onDisabled: { [weak self] reason in self?.tapWasDisabled(reason) })
         guard t.start() else {
             state = .needsInputMonitoring
-            settingsURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+            settingsURL = Self.inputMonitoringURL
             return false
         }
         tap = t
+        switcher.tap = t
         // タップが動いてから差し替える (動かないのに Caps Lock だけ効かなくなるのを防ぐ)。
         // さらに少し待ち、タップがすぐ止められなかったときだけ行う (権限が外れかけているときに、
         // 開始と解除を繰り返して hidutil を何度も起動するのを避ける)。
@@ -154,9 +159,8 @@ final class Controller: NSObject, NSApplicationDelegate {
         case .userInput:
             suspend()
         case .timeout:
-            let now = DispatchTime.now().uptimeNanoseconds
-            timeoutStamps = timeoutStamps.filter { now - $0 < 10_000_000_000 } + [now]
-            if timeoutStamps.count > 3 { suspend() } else if AXIsProcessTrusted() { tap?.reenable() } else { suspend() }
+            timeoutStamps = Self.appendingNow(to: timeoutStamps, within: 10)
+            if timeoutStamps.count > 3 || !AXIsProcessTrusted() { suspend() } else { tap?.reenable() }
         }
     }
 
@@ -165,27 +169,28 @@ final class Controller: NSObject, NSApplicationDelegate {
         teardown()
         timeoutStamps = []
         state = AXIsProcessTrusted() ? .restarting : .needsAccessibility
-        settingsURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        settingsURL = Self.accessibilityURL
         // 繰り返し止められるなら、再開の間隔を倍々に延ばす (最大 30 秒)。権限の状態が食い違っていると、
         // 再開と停止を繰り返してキー入力が滞るため。
-        let now = DispatchTime.now().uptimeNanoseconds
-        suspendStamps = suspendStamps.filter { now - $0 < 60_000_000_000 } + [now]
+        suspendStamps = Self.appendingNow(to: suspendStamps, within: 60)
         let interval = min(30.0, 2.0 * pow(2.0, Double(suspendStamps.count - 1)))
         Trace.log("手放した。再確認まで \(Int(interval)) 秒 (60 秒間に \(suspendStamps.count) 回目)")
         startPolling(interval: interval)
         refresh()
     }
 
-    /// 動作中に権限が外された (見張りが気づいた)。
-    private func permissionLost() {
-        suspend()
+    /// 直近 `window` 秒以内の時刻に、今を足したもの。
+    private static func appendingNow(to stamps: [UInt64], within window: Double) -> [UInt64] {
+        let now = DispatchTime.now().uptimeNanoseconds
+        let limit = UInt64(window * 1e9)
+        return stamps.filter { now - $0 < limit } + [now]
     }
 
-    /// 権限が外されたことをタップが止められる前に気づくための見張り (1 秒ごと)。
+    /// 権限が外されたことを、タップが止められる前に気づくための見張り (1 秒ごと)。
     private func startHealthCheck() {
         healthTimer?.invalidate()
         healthTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            if !AXIsProcessTrusted() { self?.permissionLost() }
+            if !AXIsProcessTrusted() { self?.suspend() }
         }
     }
 
@@ -197,96 +202,6 @@ final class Controller: NSObject, NSApplicationDelegate {
             self.pollTimer?.invalidate()
             self.pollTimer = nil
             self.refresh()
-        }
-    }
-
-    /// 切り替え要求。前の切り替えから間もないときは、落ち着くまで待って最後の要求だけ行う
-    /// (英語⇔日本語を素早く往復すると、表示は日本語なのに英語が入力される問題への対策)。
-    /// 間隔が空いているときは待たずに即座に切り替える。
-    private func switchTo(_ language: Language) {
-        pendingSwitch?.cancel()
-        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - lastSwitchAt.uptimeNanoseconds) / 1e9
-        Trace.log("要求 \(language.displayName) (前の切り替えから \(Int(elapsed * 1000)) ms\(elapsed >= settleInterval ? "" : "、待って実行"))")
-        if elapsed >= settleInterval {
-            perform(language)
-            return
-        }
-        let work = DispatchWorkItem { [weak self] in self?.perform(language) }
-        pendingSwitch = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (settleInterval - elapsed), execute: work)
-    }
-
-    private func perform(_ language: Language) {
-        lastSwitchAt = DispatchTime.now()
-        generation += 1
-        let mine = generation
-        let preferred = config.inputSources[language.rawValue] ?? []
-        let willChange = !InputSources.isCurrent(language, preferred: preferred)
-        Trace.log("実行 \(language.displayName): 現在=\(InputSources.currentID() ?? "?") 切り替わる=\(willChange)")
-        let method: SwitchMethod = language == .english ? config.englishMethod
-            : language == .japanese ? config.japaneseMethod : .inputSource
-        var failure: String?
-        // 入力ソースが有効でないときは、キーを送らずに入力ソースを選んで、利用者向けの説明を出す
-        if method == .key && InputSources.isAvailable(language, preferred: preferred) {
-            // 英数 / かなキーに任せる。すでに狙いの入力ソースなら何もしない (処理されないキーは文字として入力されるため)
-            if willChange {
-                InputSources.postKey(language == .english ? 102 : 104)
-                Trace.log("キー送信: \(language == .english ? "英数" : "かな")")
-            }
-        } else {
-            failure = InputSources.select(language, preferred: preferred)
-            Trace.log("select 結果: \(failure ?? "OK") 現在=\(InputSources.currentID() ?? "?")")
-        }
-        if failure != switchWarning { switchWarning = failure; refresh() }
-        guard failure == nil else { return }
-        if willChange { holdKeys(until: language, preferred: preferred) }
-        // 切り替えが IME 側で戻されていたら一度だけ選び直す (間に別の切り替えが入っていたら何もしない)
-        DispatchQueue.main.asyncAfter(deadline: .now() + verifyDelay) { [weak self] in
-            guard let self = self, self.generation == mine else { return }
-            let ok = InputSources.isCurrent(language, preferred: preferred)
-            Trace.log("確認 (+\(Int(self.verifyDelay * 1000)) ms): 現在=\(InputSources.currentID() ?? "?") 一致=\(ok)")
-            if !ok {
-                // (キー方式では、切り替わらなかったときの代わりにもなる)
-                // 覚えていた参照が古くて効いていない可能性があるので、引き直してから選び直す
-                InputSources.invalidate()
-                let retry = InputSources.select(language, preferred: preferred)
-                Trace.log("選び直し: \(retry ?? "OK")")
-                return
-            }
-        }
-    }
-
-    /// 切り替えが入力先に届くまでキー入力を預かる (`EventTap` の説明を参照)。
-    /// 切り替えの通知が来て少し待ったら、通知が来なくても `holdTimeout` で必ず戻す。
-    private func holdKeys(until language: Language, preferred: [String]) {
-        tap?.beginHold()
-        Trace.log("キーを預かり始める")
-        holdTarget = (language, preferred)
-        holdGeneration += 1
-        let mine = holdGeneration
-        DispatchQueue.main.asyncAfter(deadline: .now() + holdTimeout) { [weak self] in
-            guard let self = self, self.holdGeneration == mine else { return }
-            self.releaseHeldKeys("時間切れ")
-        }
-    }
-
-    /// 預かったキーを返す。
-    private func releaseHeldKeys(_ reason: String) {
-        guard holdTarget != nil else { return } // 二重に呼ばれても一度だけ
-        holdTarget = nil
-        let count = tap?.endHold() ?? 0
-        Trace.log("キーを返す (\(reason)): \(count) 件")
-    }
-
-    /// 入力ソースが切り替わった通知。狙いどおりなら、入力先の準備を少し待ってから預かったキーを送る。
-    private func inputSourceChanged() {
-        Trace.log("通知: 入力ソース変更 現在=\(InputSources.currentID() ?? "?")")
-        guard let target = holdTarget,
-              InputSources.isCurrent(target.language, preferred: target.preferred) else { return }
-        let mine = holdGeneration
-        DispatchQueue.main.asyncAfter(deadline: .now() + landingDelay) { [weak self] in
-            guard let self = self, self.holdGeneration == mine else { return }
-            self.releaseHeldKeys("切り替え確認")
         }
     }
 

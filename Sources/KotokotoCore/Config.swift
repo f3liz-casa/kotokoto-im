@@ -8,7 +8,7 @@ public enum Target: String, Codable, Equatable {
 }
 
 /// 切り替えの方法。
-/// - inputSource: 入力ソースを直接選ぶ (既定)。
+/// - inputSource: 入力ソースを直接選ぶ。
 /// - key: 英数 / かなキーのイベントを送り、切り替えを macOS に任せる (⌘英かな と同じ方式)。
 public enum SwitchMethod: String, Codable, Equatable {
     case inputSource, key
@@ -24,7 +24,7 @@ public struct Config: Codable, Equatable {
     /// 言語ごとに優先して使う入力ソース ID (例: {"korean": ["com.apple.inputmethod.Korean.3SetKorean"]})。
     /// `kotokoto-im --list` で ID を確認できる。
     public var inputSources: [String: [String]] = [:]
-    /// 英語・日本語へ切り替える方法。`key` は英数 / かなキーを送る。
+    /// 英語・日本語へ切り替える方法。韓国語は常に `inputSource`。
     /// 日本語は `key` が既定: 入力ソースを直接選ぶと、Mozc / Google 日本語入力が直接入力モードのまま
     /// ひらがなにならないことがあるため (実機で確認)。英語は、英数キーだとキー配列の入力ソースに
     /// 変わらないことがあるので `inputSource` が既定。
@@ -34,6 +34,15 @@ public struct Config: Codable, Equatable {
     public var trace: Bool = false
 
     public init() {}
+
+    /// その言語へ切り替える方法。
+    public func method(for language: Language) -> SwitchMethod {
+        switch language {
+        case .english: return englishMethod
+        case .japanese: return japaneseMethod
+        case .korean: return .inputSource
+        }
+    }
 
     private enum CodingKeys: String, CodingKey {
         case capsLock, leftCommand, rightCommand, maxTapDuration, inputSources, englishMethod, japaneseMethod, trace

@@ -24,6 +24,13 @@ final class ConfigTests: XCTestCase {
         XCTAssertThrowsError(try Config.parse(Data(#"{"englishMethod":"magic"}"#.utf8)))
     }
 
+    func testMethodForLanguage() throws {
+        let c = try Config.parse(Data(#"{"englishMethod":"key","japaneseMethod":"inputSource"}"#.utf8))
+        XCTAssertEqual(c.method(for: .english), .key)
+        XCTAssertEqual(c.method(for: .japanese), .inputSource)
+        XCTAssertEqual(c.method(for: .korean), .inputSource)
+    }
+
     func testTraceDefaultsToFalse() throws {
         XCTAssertFalse(Config().trace)
         XCTAssertTrue(try Config.parse(Data(#"{"trace":true}"#.utf8)).trace)

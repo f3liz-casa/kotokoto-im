@@ -24,6 +24,4 @@ enum Trace {
         _ = try? handle.seekToEnd()
         try? handle.write(contentsOf: Data(line.utf8))
     }
-
-    static var path: String { url.path }
 }

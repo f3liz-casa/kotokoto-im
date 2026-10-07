@@ -7,7 +7,7 @@ if args.contains("--list") {
     exit(0)
 }
 if args.contains("--bench") {
-    InputSources.bench()
+    Bench.run()
     exit(0)
 }
 if args.contains("--reset") {

@@ -98,8 +98,22 @@ Caps Lock を押してから切り替わるまでの経路で、次のことを�
 
 ## 仕組み
 
-- Caps Lock は `hidutil` で F18 に差し替え、イベントタップで F18 を検出して消費します(遅延・取りこぼし対策)。
-- ⌘ は `flagsChanged` の左右別ビットで押下/解放を追い、間に他の入力が無ければタップとみなします(`Sources/KotokotoCore`)。
-- 切り替えは `TISSelectInputSource` で行います。
+- **Caps Lock** は `hidutil` で F18 に差し替え、イベントタップで F18 を検出して消費します(遅延・取りこぼし対策)。
+- **⌘** は `flagsChanged` の左右別ビットで押下/解放を追い、間に他の入力が無ければタップとみなします。
+- **切り替え**は、日本語は かな キーのイベントを送って macOS に任せ、英語と韓国語は `TISSelectInputSource` で入力ソースを選びます(`englishMethod` / `japaneseMethod` で変えられます)。切り替え中に打たれたキーは預かり、切り替えが届いてから返します。
 
 注意: 差し替えの解除は `hidutil` の `UserKeyMapping` を空にするため、他で設定した独自のキー割り当ては消えます。
+
+## 構成
+
+| ファイル | 役割 |
+| --- | --- |
+| `Sources/KotokotoCore/` | OS に依存しない部分(`Language`、⌘単独タップの判定 `TapDetector`、設定 `Config`)。`swift test` で試験できる |
+| `Sources/kotokoto-im/main.swift` | 起動、コマンドライン引数(`--list` `--bench` `--reset`)、終了シグナル |
+| `Controller.swift` | メニューバー、権限、タップの開始・停止、システムに止められたときの対処 |
+| `EventTap.swift` | キー入力の監視(F18、⌘タップ)と、切り替え中のキーの預かり |
+| `Switcher.swift` | 切り替え要求の処理(まとめる、切り替える、預かる、確かめる) |
+| `InputSources.swift` | 入力ソースの検索・選択、かなキー / 英数キーの送信 |
+| `CapsLockRemap.swift` | `hidutil` による Caps Lock の差し替え |
+| `Bench.swift` / `Trace.swift` | 診断(切り替え時間の計測、ログ) |
+| `docs/ime-delay.md` | 切り替えの遅延と、「表示は日本語なのに英字が入る」件の調査メモ |
