@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon
 import KotokotoCore
 
 /// メニューバー常駐の本体。普段は静かで、困ったときだけメニューに理由と次の一手を出す。
@@ -36,9 +37,17 @@ final class Controller: NSObject, NSApplicationDelegate {
     private var pendingSwitch: DispatchWorkItem?
     private var generation = 0
 
+    private let landingDelay = 0.03    // 切り替えの通知から、入力先が使えるようになるまでの余裕 (秒)
+    private let holdTimeout = 0.3      // 通知が来なくてもキーを預かるのはこの時間まで (秒)
+    private var holdGeneration = 0
+    private var holdTarget: (language: Language, preferred: [String])?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
         InputSources.observeChanges()
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil, queue: .main) { [weak self] _ in self?.inputSourceChanged() }
         reload()
     }
 
@@ -67,6 +76,7 @@ final class Controller: NSObject, NSApplicationDelegate {
         pollTimer = nil
         healthTimer?.invalidate()
         healthTimer = nil
+        tap?.endHold()
         tap?.stop()
         tap = nil
         if remapped { CapsLockRemap.disable(); remapped = false }
@@ -162,9 +172,11 @@ final class Controller: NSObject, NSApplicationDelegate {
         generation += 1
         let mine = generation
         let preferred = config.inputSources[language.rawValue] ?? []
+        let willChange = !InputSources.isCurrent(language, preferred: preferred)
         let failure = InputSources.select(language, preferred: preferred)
         if failure != switchWarning { switchWarning = failure; refresh() }
         guard failure == nil else { return }
+        if willChange { holdKeys(until: language, preferred: preferred) }
         // 切り替えが IME 側で戻されていたら一度だけ選び直す (間に別の切り替えが入っていたら何もしない)
         DispatchQueue.main.asyncAfter(deadline: .now() + verifyDelay) { [weak self] in
             guard let self = self, self.generation == mine else { return }
@@ -175,6 +187,35 @@ final class Controller: NSObject, NSApplicationDelegate {
             // 日本語入力が実際に有効になったことを確かめてから「かな」キーを送る
             // (有効でないうちに送ると、アプリに U+0010 が入力されてしまう)
             if language == .japanese && self.config.sendKanaKey { InputSources.postKanaKey() }
+        }
+    }
+
+    /// 切り替えが入力先に届くまでキー入力を預かる (`EventTap` の説明を参照)。
+    /// 切り替えの通知が来て少し待ったら、通知が来なくても `holdTimeout` で必ず戻す。
+    private func holdKeys(until language: Language, preferred: [String]) {
+        tap?.beginHold()
+        holdTarget = (language, preferred)
+        holdGeneration += 1
+        let mine = holdGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + holdTimeout) { [weak self] in
+            guard let self = self, self.holdGeneration == mine else { return }
+            self.releaseHeldKeys()
+        }
+    }
+
+    private func releaseHeldKeys() {
+        holdTarget = nil
+        tap?.endHold()
+    }
+
+    /// 入力ソースが切り替わった通知。狙いどおりなら、入力先の準備を少し待ってから預かったキーを送る。
+    private func inputSourceChanged() {
+        guard let target = holdTarget,
+              InputSources.isCurrent(target.language, preferred: target.preferred) else { return }
+        let mine = holdGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + landingDelay) { [weak self] in
+            guard let self = self, self.holdGeneration == mine else { return }
+            self.releaseHeldKeys()
         }
     }
 

@@ -14,6 +14,15 @@ final class EventTap {
     private var port: CFMachPort?
     private var source: CFRunLoopSource?
 
+    // 入力ソースの切り替え中に打たれたキーを預かる。macOS は切り替えを通知してから、
+    // 入力先アプリの入力メソッドが使えるようになるまで少し間があり、その間のキーは切り替え前の入力ソースに届く
+    // (表示は日本語なのに英語が入力される)。切り替えが済んでから元の順序で送り直す。gksdud と同じ考え方。
+    private var holding = false
+    private var heldEvents: [CGEvent] = []
+    private let maxHeld = 128
+    /// 送り直したイベントの目印。自分のタップで再び預からないようにする。
+    private let replayMarker: Int64 = 0x4B4F544F // "KOTO"
+
     // NX_DEVICELCMDKEY / NX_DEVICERCMDKEY (左右を区別するデバイス依存ビット)
     private let leftCmdBit: UInt64 = 0x08
     private let rightCmdBit: UInt64 = 0x10
@@ -53,6 +62,20 @@ final class EventTap {
         if let port = port { CGEvent.tapEnable(tap: port, enable: true) }
     }
 
+    /// キーを預かり始める。`endHold()` が呼ばれるまで、キー入力は届かない。
+    func beginHold() { holding = true }
+
+    /// 預かったキーを元の順序で送り直し、通常に戻す。
+    func endHold() {
+        holding = false
+        let events = heldEvents
+        heldEvents = []
+        for event in events {
+            event.setIntegerValueField(.eventSourceUserData, value: replayMarker)
+            event.post(tap: .cghidEventTap)
+        }
+    }
+
     func stop() {
         if let port = port { CGEvent.tapEnable(tap: port, enable: false); CFMachPortInvalidate(port) }
         if let source = source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
@@ -71,6 +94,7 @@ final class EventTap {
             return pass
 
         case .keyDown, .keyUp:
+            if event.getIntegerValueField(.eventSourceUserData) == replayMarker { return pass }
             let code = event.getIntegerValueField(.keyboardEventKeycode)
             // 差し替えが有効なときだけ F18 を消費する (本物の F18 キーを奪わない)
             if code == CapsLockRemap.f18KeyCode, let lang = config.capsLock.language {
@@ -79,6 +103,11 @@ final class EventTap {
                 return nil
             }
             detector.otherInput()
+            if holding, let copy = event.copy() {
+                heldEvents.append(copy)
+                if heldEvents.count >= maxHeld { endHold() }
+                return nil
+            }
             return pass
 
         case .flagsChanged:
