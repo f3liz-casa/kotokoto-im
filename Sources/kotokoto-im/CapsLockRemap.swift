@@ -2,7 +2,8 @@ import Foundation
 
 /// Caps Lock を F18 に割り当てる (hidutil、root 不要)。
 /// Caps Lock を直接フックすると遅延や取りこぼしが出るため、gksdud と同様にキーを差し替える。
-/// 設定は再起動で消える。終了時に UserKeyMapping を空に戻す。
+/// 設定は再起動で消える。正常終了時は UserKeyMapping を空に戻す。
+/// 強制終了で残った場合は `kotokoto-im --reset` で戻せる。
 enum CapsLockRemap {
     static let f18KeyCode: Int64 = 79 // kVK_F18
 

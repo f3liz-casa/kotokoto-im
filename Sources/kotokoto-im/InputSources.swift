@@ -27,11 +27,12 @@ enum InputSources {
         return (Unmanaged<CFArray>.fromOpaque(p).takeUnretainedValue() as? [String]) ?? []
     }
 
-    @discardableResult
-    static func select(_ language: Language) -> Bool {
-        guard let spec = candidates[language] else { return false }
+    /// 入力ソースを選ぶ。成功なら nil、失敗なら利用者向けの説明を返す。
+    /// `preferred` は設定ファイルで指定された ID (既定の候補より先に探す)。
+    static func select(_ language: Language, preferred: [String] = []) -> String? {
+        guard let spec = candidates[language] else { return nil }
         let sources = enabledSources()
-        let byID = spec.ids.lazy.compactMap { id in
+        let byID = (preferred + spec.ids).lazy.compactMap { id in
             sources.first { string($0, kTISPropertyInputSourceID) == id }
         }.first
         let byLang = sources.first {
@@ -39,10 +40,9 @@ enum InputSources {
                 && (language != .english || string($0, kTISPropertyInputSourceType) == kTISTypeKeyboardLayout as String)
         }
         guard let target = byID ?? byLang else {
-            fputs("kotokoto-im: \(language) の入力ソースが有効になっていません (システム設定 > キーボード > 入力ソース)\n", stderr)
-            return false
+            return "\(language.displayName)の入力ソースが有効ではありません。システム設定 > キーボード > 入力ソース で追加してください。"
         }
-        return TISSelectInputSource(target) == noErr
+        return TISSelectInputSource(target) == noErr ? nil : "\(language.displayName)への切り替えに失敗しました。"
     }
 
     /// 有効な入力ソース ID を表示する (`--list`)。

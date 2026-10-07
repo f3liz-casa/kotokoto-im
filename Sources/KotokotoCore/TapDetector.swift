@@ -1,8 +1,16 @@
 /// 切り替え先の言語。
-public enum Language: Equatable {
+public enum Language: String, Equatable {
     case english
     case japanese
     case korean
+
+    public var displayName: String {
+        switch self {
+        case .english: return "英語"
+        case .japanese: return "日本語"
+        case .korean: return "韓国語"
+        }
+    }
 }
 
 public enum CommandSide: Equatable {
@@ -24,8 +32,8 @@ public struct TapDetector {
         self.maxTapDuration = maxTapDuration
     }
 
-    /// ⌘キーの押下/解放を通知する。タップが成立したら切り替え先を返す。
-    public mutating func commandChanged(_ side: CommandSide, isDown: Bool, at time: Double) -> Language? {
+    /// ⌘キーの押下/解放を通知する。タップが成立したらそのキーの側を返す。
+    public mutating func commandChanged(_ side: CommandSide, isDown: Bool, at time: Double) -> CommandSide? {
         let id = side == .left ? 0 : 1
         if isDown {
             let alreadyHeld = !held.isEmpty
@@ -38,7 +46,7 @@ public struct TapDetector {
         held.remove(id)
         defer { pending = nil }
         guard pending == side, time - pressedAt <= maxTapDuration else { return nil }
-        return side == .left ? .english : .japanese
+        return side
     }
 
     /// ⌘以外のキー入力・修飾キー変化・マウスクリックを通知する (タップを無効化)。

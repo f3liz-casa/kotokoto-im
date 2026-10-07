@@ -2,16 +2,16 @@ import XCTest
 @testable import KotokotoCore
 
 final class TapDetectorTests: XCTestCase {
-    func testLeftTapIsEnglish() {
+    func testLeftTap() {
         var d = TapDetector()
         XCTAssertNil(d.commandChanged(.left, isDown: true, at: 0))
-        XCTAssertEqual(d.commandChanged(.left, isDown: false, at: 0.1), .english)
+        XCTAssertEqual(d.commandChanged(.left, isDown: false, at: 0.1), .left)
     }
 
-    func testRightTapIsJapanese() {
+    func testRightTap() {
         var d = TapDetector()
         XCTAssertNil(d.commandChanged(.right, isDown: true, at: 0))
-        XCTAssertEqual(d.commandChanged(.right, isDown: false, at: 0.1), .japanese)
+        XCTAssertEqual(d.commandChanged(.right, isDown: false, at: 0.1), .right)
     }
 
     func testShortcutDoesNotFire() {
@@ -41,6 +41,6 @@ final class TapDetectorTests: XCTestCase {
         d.otherInput()
         _ = d.commandChanged(.left, isDown: false, at: 0.1)
         _ = d.commandChanged(.left, isDown: true, at: 1)
-        XCTAssertEqual(d.commandChanged(.left, isDown: false, at: 1.1), .english)
+        XCTAssertEqual(d.commandChanged(.left, isDown: false, at: 1.1), .left)
     }
 }
