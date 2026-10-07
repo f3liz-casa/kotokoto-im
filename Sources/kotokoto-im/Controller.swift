@@ -9,6 +9,7 @@ final class Controller: NSObject, NSApplicationDelegate {
         case running
         case needsAccessibility
         case needsInputMonitoring
+        case restarting  // システムに止められたので、少し待ってから再開する
     }
 
     static let configURL = FileManager.default.homeDirectoryForCurrentUser
@@ -27,6 +28,7 @@ final class Controller: NSObject, NSApplicationDelegate {
     private var tap: EventTap?
     private var remapped = false
     private var pollTimer: Timer?
+    private var timeoutStamps: [UInt64] = []
     private var healthTimer: Timer?
     private var settingsURL = ""
     private var askedForAccessibility = false
@@ -109,7 +111,7 @@ final class Controller: NSObject, NSApplicationDelegate {
         }
         let t = EventTap(config: config,
                          onSwitch: { [weak self] lang in self?.switchTo(lang) },
-                         onDisabled: { [weak self] in self?.tapWasDisabled() })
+                         onDisabled: { [weak self] reason in self?.tapWasDisabled(reason) })
         guard t.start() else {
             state = .needsInputMonitoring
             settingsURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
@@ -123,17 +125,36 @@ final class Controller: NSObject, NSApplicationDelegate {
         return true
     }
 
-    /// システムにタップを止められた。権限が外されているなら潔く手放し、あるなら再開する。
-    private func tapWasDisabled() {
-        if AXIsProcessTrusted() { tap?.reenable() } else { permissionLost() }
+    /// システムにタップを止められた。
+    /// - 権限の取り消しなどシステム側の都合 (userInput): 再開せず、タップと Caps Lock の差し替えを手放す。
+    ///   権限を外した直後は `AXIsProcessTrusted()` がまだ true を返すことがあり、再開しても直後にまた止められ、
+    ///   その繰り返しで入力が固まる。再開は少し待ってから (`startPolling`) 確かめ直す。
+    /// - コールバックが遅かった (timeout): 再開するが、短時間に繰り返すなら手放す。
+    private func tapWasDisabled(_ reason: TapDisabledReason) {
+        Trace.log("タップが止められた: \(reason) 信頼=\(AXIsProcessTrusted())")
+        switch reason {
+        case .userInput:
+            suspend()
+        case .timeout:
+            let now = DispatchTime.now().uptimeNanoseconds
+            timeoutStamps = timeoutStamps.filter { now - $0 < 10_000_000_000 } + [now]
+            if timeoutStamps.count > 3 { suspend() } else if AXIsProcessTrusted() { tap?.reenable() } else { suspend() }
+        }
     }
 
-    /// 動作中に権限が外された。タップと Caps Lock の差し替えを直ちに解除して許可待ちに戻る
-    /// (タップを持ったまま権限を失うと、キー入力が固まることがある)。
-    private func permissionLost() {
+    /// タップと Caps Lock の差し替えを手放し、権限が戻る/落ち着くのを待つ (すぐには再開しない)。
+    private func suspend() {
         teardown()
-        if !tryStart() { startPolling() }
+        timeoutStamps = []
+        state = AXIsProcessTrusted() ? .restarting : .needsAccessibility
+        settingsURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        startPolling()
         refresh()
+    }
+
+    /// 動作中に権限が外された (見張りが気づいた)。
+    private func permissionLost() {
+        suspend()
     }
 
     /// 権限が外されたことをタップが止められる前に気づくための見張り (1 秒ごと)。
@@ -262,6 +283,10 @@ final class Controller: NSObject, NSApplicationDelegate {
             // 再ビルドで署名が変わると、一覧でオンでも許可として扱われないことがある
             hintLine.title = "オンなのに変わらない場合: 一覧から kotokoto-im を削除(−)し、アプリを追加し直してください"
             hintLine.isHidden = false
+        case .restarting:
+            statusLine.title = "キー入力の監視をシステムに止められました。少し待って再開します"
+            settingsItem.isHidden = true
+            hintLine.isHidden = true
         case .needsInputMonitoring:
             statusLine.title = "入力監視の許可が必要です"
             settingsItem.title = "入力監視の設定を開く…"

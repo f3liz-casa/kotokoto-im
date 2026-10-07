@@ -1,6 +1,13 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import KotokotoCore
+
+/// システムにタップを止められた理由。
+enum TapDisabledReason {
+    case timeout    // コールバックが遅かった
+    case userInput  // 権限の取り消しなど、システム側の都合
+}
 
 /// キーイベントを監視して切り替え要求を出す。
 /// - F18 (Caps Lock から差し替え済み) → capsLock の割り当て (イベントは消費)
@@ -9,10 +16,11 @@ final class EventTap {
     private let config: Config
     private let onSwitch: (Language) -> Void
     /// システムにタップを止められたとき (タイムアウトや権限の取り消し) に呼ばれる。
-    private let onDisabled: () -> Void
+    private let onDisabled: (TapDisabledReason) -> Void
     private var detector: TapDetector
     private var port: CFMachPort?
     private var source: CFRunLoopSource?
+    private var mouseMonitors: [Any] = []
 
     // 入力ソースの切り替え中に打たれたキーを預かる。macOS は切り替えを通知してから、
     // 入力先アプリの入力メソッドが使えるようになるまで少し間があり、その間のキーは切り替え前の入力ソースに届く
@@ -29,7 +37,7 @@ final class EventTap {
     private let leftCmdKey: Int64 = 55
     private let rightCmdKey: Int64 = 54
 
-    init(config: Config, onSwitch: @escaping (Language) -> Void, onDisabled: @escaping () -> Void) {
+    init(config: Config, onSwitch: @escaping (Language) -> Void, onDisabled: @escaping (TapDisabledReason) -> Void) {
         self.config = config
         self.onSwitch = onSwitch
         self.onDisabled = onDisabled
@@ -37,8 +45,9 @@ final class EventTap {
     }
 
     func start() -> Bool {
-        let types: [CGEventType] = [.keyDown, .keyUp, .flagsChanged,
-                                    .leftMouseDown, .rightMouseDown, .otherMouseDown]
+        // マウスは差し止め可能なタップに通さない (タップが止まったときにマウスまで固まるのを避ける)。
+        // クリックの検知は NSEvent の監視で行う (cmd-eikana と同じ)。
+        let types: [CGEventType] = [.keyDown, .keyUp, .flagsChanged]
         let mask = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
         let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon = refcon else { return Unmanaged.passUnretained(event) }
@@ -55,6 +64,15 @@ final class EventTap {
         self.source = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: port, enable: true)
+        let mouse: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mouse, handler: { [weak self] _ in self?.detector.otherInput() }) {
+            mouseMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mouse, handler: { [weak self] event in
+            self?.detector.otherInput(); return event
+        }) {
+            mouseMonitors.append(local)
+        }
         return true
     }
 
@@ -79,6 +97,8 @@ final class EventTap {
     }
 
     func stop() {
+        mouseMonitors.forEach { NSEvent.removeMonitor($0) }
+        mouseMonitors = []
         if let port = port { CGEvent.tapEnable(tap: port, enable: false); CFMachPortInvalidate(port) }
         if let source = source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         port = nil
@@ -92,7 +112,8 @@ final class EventTap {
             // 再開してよいかは持ち主が決める (権限が外されているのに再開し続けると入力が固まる)。
             // タップを止める・壊す処理をコールバックの中で行わないよう、次の実行ループに回す。
             let notify = onDisabled
-            DispatchQueue.main.async { notify() }
+            let reason: TapDisabledReason = type == .tapDisabledByTimeout ? .timeout : .userInput
+            DispatchQueue.main.async { notify(reason) }
             return pass
 
         case .keyDown, .keyUp:
@@ -101,7 +122,8 @@ final class EventTap {
             // 差し替えが有効なときだけ F18 を消費する (本物の F18 キーを奪わない)
             if code == CapsLockRemap.f18KeyCode, let lang = config.capsLock.language {
                 let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
-                if type == .keyDown && !isRepeat { onSwitch(lang) }
+                // 入力ソースの操作はコールバックの外で行う (重いとタップが止まり、入力全体が固まる)
+                if type == .keyDown && !isRepeat { let go = onSwitch; DispatchQueue.main.async { go(lang) } }
                 return nil
             }
             detector.otherInput()
@@ -127,12 +149,11 @@ final class EventTap {
             let isDown = event.flags.rawValue & bit != 0
             if let tapped = detector.commandChanged(side, isDown: isDown, at: now) {
                 let target = tapped == .left ? config.leftCommand : config.rightCommand
-                if let lang = target.language { onSwitch(lang) }
+                if let lang = target.language { let go = onSwitch; DispatchQueue.main.async { go(lang) } }
             }
             return pass
 
-        default: // マウスクリック (⌘+クリック対策)
-            detector.otherInput()
+        default:
             return pass
         }
     }
