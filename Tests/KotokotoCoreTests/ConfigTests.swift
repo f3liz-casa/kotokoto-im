@@ -15,12 +15,12 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(c.maxTapDuration, 0.3)
     }
 
-    func testMethodsDefaultToInputSourceAndCanBeKey() throws {
+    func testMethodDefaults() throws {
         XCTAssertEqual(Config().englishMethod, .inputSource)
-        XCTAssertEqual(Config().japaneseMethod, .inputSource)
-        let c = try Config.parse(Data(#"{"japaneseMethod":"key"}"#.utf8))
-        XCTAssertEqual(c.japaneseMethod, .key)
-        XCTAssertEqual(c.englishMethod, .inputSource)
+        XCTAssertEqual(Config().japaneseMethod, .key)
+        let c = try Config.parse(Data(#"{"japaneseMethod":"inputSource","englishMethod":"key"}"#.utf8))
+        XCTAssertEqual(c.japaneseMethod, .inputSource)
+        XCTAssertEqual(c.englishMethod, .key)
         XCTAssertThrowsError(try Config.parse(Data(#"{"englishMethod":"magic"}"#.utf8)))
     }
 

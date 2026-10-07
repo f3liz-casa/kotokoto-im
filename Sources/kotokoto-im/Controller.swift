@@ -226,7 +226,8 @@ final class Controller: NSObject, NSApplicationDelegate {
         let method: SwitchMethod = language == .english ? config.englishMethod
             : language == .japanese ? config.japaneseMethod : .inputSource
         var failure: String?
-        if method == .key {
+        // 入力ソースが有効でないときは、キーを送らずに入力ソースを選んで、利用者向けの説明を出す
+        if method == .key && InputSources.isAvailable(language, preferred: preferred) {
             // 英数 / かなキーに任せる。すでに狙いの入力ソースなら何もしない (処理されないキーは文字として入力されるため)
             if willChange {
                 InputSources.postKey(language == .english ? 102 : 104)

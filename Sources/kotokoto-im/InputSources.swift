@@ -65,6 +65,11 @@ enum InputSources {
         string(TISCopyCurrentKeyboardInputSource().takeRetainedValue(), kTISPropertyInputSourceID)
     }
 
+    /// 狙いの入力ソースが有効になっているか。
+    static func isAvailable(_ language: Language, preferred: [String] = []) -> Bool {
+        resolve(language, preferred: preferred) != nil
+    }
+
     /// 狙いの入力ソースが現在の入力ソースか (切り替え後の確認用)。判断できなければ true。
     static func isCurrent(_ language: Language, preferred: [String] = []) -> Bool {
         guard let target = resolve(language, preferred: preferred),

@@ -24,9 +24,12 @@ public struct Config: Codable, Equatable {
     /// 言語ごとに優先して使う入力ソース ID (例: {"korean": ["com.apple.inputmethod.Korean.3SetKorean"]})。
     /// `kotokoto-im --list` で ID を確認できる。
     public var inputSources: [String: [String]] = [:]
-    /// 英語・日本語へ切り替える方法 (実験的)。`key` は英数 / かなキーを送る。
+    /// 英語・日本語へ切り替える方法。`key` は英数 / かなキーを送る。
+    /// 日本語は `key` が既定: 入力ソースを直接選ぶと、Mozc / Google 日本語入力が直接入力モードのまま
+    /// ひらがなにならないことがあるため (実機で確認)。英語は、英数キーだとキー配列の入力ソースに
+    /// 変わらないことがあるので `inputSource` が既定。
     public var englishMethod: SwitchMethod = .inputSource
-    public var japaneseMethod: SwitchMethod = .inputSource
+    public var japaneseMethod: SwitchMethod = .key
     /// 切り替えの経緯を ~/Library/Logs/kotokoto-im.log に書く (診断用)。
     public var trace: Bool = false
 

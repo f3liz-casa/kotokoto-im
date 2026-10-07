@@ -93,7 +93,7 @@ Caps Lock を押してから切り替わるまでの経路で、次のことを�
 - `capsLock` / `leftCommand` / `rightCommand`: `english` `japanese` `korean` `none`。`capsLock` を `none` にすると Caps Lock の差し替え自体を行いません。
 - `maxTapDuration`: ⌘ をこの秒数より長く押すとタップとみなしません。
 - `inputSources`: 言語ごとに優先する入力ソース ID(`--list` で確認)。
-- `englishMethod` / `japaneseMethod`(実験的、`inputSource` か `key`、既定 `inputSource`): `key` にすると、入力ソースを直接選ばず、英数 / かなキーのイベントを送って macOS に切り替えを任せます([⌘英かな](https://github.com/dominion525/cmd-eikana) と同じ方式)。すでに狙いの入力ソースのときは何も送りません。60 ms 経っても切り替わっていなければ、入力ソースを直接選び直します。英数キーは、日本語入力(Mozc など)が処理して「直接入力」になるだけで、キー配列(Dvorak など)の入力ソースには変わらないことがあるため、`englishMethod` は様子を見てから使ってください。
+- `englishMethod` / `japaneseMethod`(`inputSource` か `key`、既定は英語が `inputSource`、日本語が `key`): `key` は、入力ソースを直接選ばず、英数 / かなキーのイベントを送って macOS に切り替えを任せます([⌘英かな](https://github.com/dominion525/cmd-eikana) と同じ方式)。日本語を `key` にしているのは、入力ソースを直接選ぶと、Mozc / Google 日本語入力が直接入力モードのままになり、表示は日本語なのに英字が入力されることがあるためです。すでに狙いの入力ソースのときは何も送りません(処理されないキーは文字として入力されるため)。60 ms 経っても切り替わっていなければ、入力ソースを直接選び直します。英数キーは、日本語入力が処理して「直接入力」になるだけで、Dvorak などのキー配列の入力ソースには変わらないことがあるため、`englishMethod` は様子を見てから使ってください。
 - `trace`(診断用、既定 `false`): 切り替えの要求・実行・通知・確認の時刻と現在の入力ソース、およびキー入力の時刻と入力ソース(どのキーかは記録しません)を `~/Library/Logs/kotokoto-im.log` に書きます。「表示と入力がずれる」ような問題の報告に使えます。設定を再読み込みすると有効になります。
 
 ## 仕組み
