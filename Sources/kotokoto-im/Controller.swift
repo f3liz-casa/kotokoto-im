@@ -223,7 +223,7 @@ final class Controller: NSObject, NSApplicationDelegate {
         let preferred = config.inputSources[language.rawValue] ?? []
         let willChange = !InputSources.isCurrent(language, preferred: preferred)
         Trace.log("実行 \(language.displayName): 現在=\(InputSources.currentID() ?? "?") 切り替わる=\(willChange)")
-        let method: Method = language == .english ? config.englishMethod
+        let method: SwitchMethod = language == .english ? config.englishMethod
             : language == .japanese ? config.japaneseMethod : .inputSource
         var failure: String?
         if method == .key {
