@@ -61,7 +61,7 @@ enum InputSources {
         return target
     }
 
-    private static func currentID() -> String? {
+    static func currentID() -> String? {
         string(TISCopyCurrentKeyboardInputSource().takeRetainedValue(), kTISPropertyInputSourceID)
     }
 

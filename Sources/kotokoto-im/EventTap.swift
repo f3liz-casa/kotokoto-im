@@ -66,7 +66,8 @@ final class EventTap {
     func beginHold() { holding = true }
 
     /// 預かったキーを元の順序で送り直し、通常に戻す。
-    func endHold() {
+    @discardableResult
+    func endHold() -> Int {
         holding = false
         let events = heldEvents
         heldEvents = []
@@ -74,6 +75,7 @@ final class EventTap {
             event.setIntegerValueField(.eventSourceUserData, value: replayMarker)
             event.post(tap: .cghidEventTap)
         }
+        return events.count
     }
 
     func stop() {

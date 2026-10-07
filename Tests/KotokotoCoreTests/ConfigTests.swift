@@ -20,6 +20,11 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(try Config.parse(Data(#"{"sendKanaKey":true}"#.utf8)).sendKanaKey)
     }
 
+    func testTraceDefaultsToFalse() throws {
+        XCTAssertFalse(Config().trace)
+        XCTAssertTrue(try Config.parse(Data(#"{"trace":true}"#.utf8)).trace)
+    }
+
     func testUnknownTargetThrows() {
         XCTAssertThrowsError(try Config.parse(Data(#"{"capsLock":"klingon"}"#.utf8)))
     }

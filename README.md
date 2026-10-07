@@ -86,7 +86,8 @@ Caps Lock を押してから切り替わるまでの経路で、次のことを�
   "rightCommand": "japanese",
   "maxTapDuration": 0.5,
   "inputSources": { "japanese": ["org.mozc.inputmethod.Japanese.base"] },
-  "sendKanaKey": false
+  "sendKanaKey": false,
+  "trace": false
 }
 ```
 
@@ -94,6 +95,7 @@ Caps Lock を押してから切り替わるまでの経路で、次のことを�
 - `maxTapDuration`: ⌘ をこの秒数より長く押すとタップとみなしません。
 - `inputSources`: 言語ごとに優先する入力ソース ID(`--list` で確認)。
 - `sendKanaKey`(実験的、既定 `false`): 日本語入力が有効になったことを確かめてから「かな」キー(JIS)のイベントも送り、ひらがなモードに合わせます。素早く往復したときに「表示は日本語なのに英語が入力される」のを防ぐ狙いですが、環境によっては制御文字(U+0010)が入力されることがあります。
+- `trace`(診断用、既定 `false`): 切り替えの要求・実行・通知・確認の時刻と現在の入力ソースを `~/Library/Logs/kotokoto-im.log` に書きます。「表示と入力がずれる」ような問題の報告に使えます。設定を再読み込みすると有効になります。
 
 ## 仕組み
 

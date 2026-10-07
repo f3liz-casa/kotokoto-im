@@ -85,6 +85,8 @@ final class Controller: NSObject, NSApplicationDelegate {
     private func loadConfig() {
         configWarning = nil
         config = Config()
+        Trace.enabled = false
+        defer { if config.trace { Trace.enabled = true; Trace.log("--- 起動 / 設定を読み込み (trace 有効) ---") } }
         guard let data = try? Data(contentsOf: Self.configURL) else { return } // 無ければ既定値
         do {
             config = try Config.parse(data)
@@ -158,6 +160,7 @@ final class Controller: NSObject, NSApplicationDelegate {
     private func switchTo(_ language: Language) {
         pendingSwitch?.cancel()
         let elapsed = Double(DispatchTime.now().uptimeNanoseconds - lastSwitchAt.uptimeNanoseconds) / 1e9
+        Trace.log("要求 \(language.displayName) (前の切り替えから \(Int(elapsed * 1000)) ms\(elapsed >= settleInterval ? "" : "、待って実行"))")
         if elapsed >= settleInterval {
             perform(language)
             return
@@ -173,15 +176,22 @@ final class Controller: NSObject, NSApplicationDelegate {
         let mine = generation
         let preferred = config.inputSources[language.rawValue] ?? []
         let willChange = !InputSources.isCurrent(language, preferred: preferred)
+        Trace.log("実行 \(language.displayName): 現在=\(InputSources.currentID() ?? "?") 切り替わる=\(willChange)")
         let failure = InputSources.select(language, preferred: preferred)
+        Trace.log("select 結果: \(failure ?? "OK") 現在=\(InputSources.currentID() ?? "?")")
         if failure != switchWarning { switchWarning = failure; refresh() }
         guard failure == nil else { return }
         if willChange { holdKeys(until: language, preferred: preferred) }
         // 切り替えが IME 側で戻されていたら一度だけ選び直す (間に別の切り替えが入っていたら何もしない)
         DispatchQueue.main.asyncAfter(deadline: .now() + verifyDelay) { [weak self] in
             guard let self = self, self.generation == mine else { return }
-            if !InputSources.isCurrent(language, preferred: preferred) {
-                _ = InputSources.select(language, preferred: preferred)
+            let ok = InputSources.isCurrent(language, preferred: preferred)
+            Trace.log("確認 (+\(Int(self.verifyDelay * 1000)) ms): 現在=\(InputSources.currentID() ?? "?") 一致=\(ok)")
+            if !ok {
+                // 覚えていた参照が古くて効いていない可能性があるので、引き直してから選び直す
+                InputSources.invalidate()
+                let retry = InputSources.select(language, preferred: preferred)
+                Trace.log("選び直し: \(retry ?? "OK")")
                 return
             }
             // 日本語入力が実際に有効になったことを確かめてから「かな」キーを送る
@@ -194,28 +204,31 @@ final class Controller: NSObject, NSApplicationDelegate {
     /// 切り替えの通知が来て少し待ったら、通知が来なくても `holdTimeout` で必ず戻す。
     private func holdKeys(until language: Language, preferred: [String]) {
         tap?.beginHold()
+        Trace.log("キーを預かり始める")
         holdTarget = (language, preferred)
         holdGeneration += 1
         let mine = holdGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + holdTimeout) { [weak self] in
             guard let self = self, self.holdGeneration == mine else { return }
-            self.releaseHeldKeys()
+            self.releaseHeldKeys("時間切れ")
         }
     }
 
-    private func releaseHeldKeys() {
+    private func releaseHeldKeys(_ reason: String) {
         holdTarget = nil
-        tap?.endHold()
+        let count = tap?.endHold() ?? 0
+        Trace.log("キーを返す (\(reason)): \(count) 件")
     }
 
     /// 入力ソースが切り替わった通知。狙いどおりなら、入力先の準備を少し待ってから預かったキーを送る。
     private func inputSourceChanged() {
+        Trace.log("通知: 入力ソース変更 現在=\(InputSources.currentID() ?? "?")")
         guard let target = holdTarget,
               InputSources.isCurrent(target.language, preferred: target.preferred) else { return }
         let mine = holdGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + landingDelay) { [weak self] in
             guard let self = self, self.holdGeneration == mine else { return }
-            self.releaseHeldKeys()
+            self.releaseHeldKeys("切り替え確認")
         }
     }
 

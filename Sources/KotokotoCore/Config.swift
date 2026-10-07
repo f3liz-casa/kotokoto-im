@@ -20,11 +20,13 @@ public struct Config: Codable, Equatable {
     /// 日本語入力が有効になったことを確かめてから「かな」キーのイベントを送り、ひらがなモードに合わせる (実験的)。
     /// 「表示は日本語なのに英語が入力される」ことへの対策だが、環境によっては制御文字 (U+0010) が入力されるため既定はオフ。
     public var sendKanaKey: Bool = false
+    /// 切り替えの経緯を ~/Library/Logs/kotokoto-im.log に書く (診断用)。
+    public var trace: Bool = false
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case capsLock, leftCommand, rightCommand, maxTapDuration, inputSources, sendKanaKey
+        case capsLock, leftCommand, rightCommand, maxTapDuration, inputSources, sendKanaKey, trace
     }
 
     public struct Invalid: Error, CustomStringConvertible {
@@ -40,6 +42,7 @@ public struct Config: Codable, Equatable {
         maxTapDuration = try c.decodeIfPresent(Double.self, forKey: .maxTapDuration) ?? d.maxTapDuration
         inputSources = try c.decodeIfPresent([String: [String]].self, forKey: .inputSources) ?? d.inputSources
         sendKanaKey = try c.decodeIfPresent(Bool.self, forKey: .sendKanaKey) ?? d.sendKanaKey
+        trace = try c.decodeIfPresent(Bool.self, forKey: .trace) ?? d.trace
         guard maxTapDuration > 0 else { throw Invalid(description: "maxTapDuration は 0 より大きい値にしてください") }
     }
 
