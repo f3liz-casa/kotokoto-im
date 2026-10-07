@@ -8,6 +8,8 @@ import KotokotoCore
 final class EventTap {
     private let config: Config
     private let onSwitch: (Language) -> Void
+    /// システムにタップを止められたとき (タイムアウトや権限の取り消し) に呼ばれる。
+    private let onDisabled: () -> Void
     private var detector: TapDetector
     private var port: CFMachPort?
     private var source: CFRunLoopSource?
@@ -18,9 +20,10 @@ final class EventTap {
     private let leftCmdKey: Int64 = 55
     private let rightCmdKey: Int64 = 54
 
-    init(config: Config, onSwitch: @escaping (Language) -> Void) {
+    init(config: Config, onSwitch: @escaping (Language) -> Void, onDisabled: @escaping () -> Void) {
         self.config = config
         self.onSwitch = onSwitch
+        self.onDisabled = onDisabled
         self.detector = TapDetector(maxTapDuration: config.maxTapDuration)
     }
 
@@ -46,6 +49,10 @@ final class EventTap {
         return true
     }
 
+    func reenable() {
+        if let port = port { CGEvent.tapEnable(tap: port, enable: true) }
+    }
+
     func stop() {
         if let port = port { CGEvent.tapEnable(tap: port, enable: false); CFMachPortInvalidate(port) }
         if let source = source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
@@ -57,7 +64,10 @@ final class EventTap {
         let pass = Unmanaged.passUnretained(event)
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
-            if let port = port { CGEvent.tapEnable(tap: port, enable: true) }
+            // 再開してよいかは持ち主が決める (権限が外されているのに再開し続けると入力が固まる)。
+            // タップを止める・壊す処理をコールバックの中で行わないよう、次の実行ループに回す。
+            let notify = onDisabled
+            DispatchQueue.main.async { notify() }
             return pass
 
         case .keyDown, .keyUp:

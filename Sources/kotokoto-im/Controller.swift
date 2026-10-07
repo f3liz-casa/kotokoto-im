@@ -25,6 +25,7 @@ final class Controller: NSObject, NSApplicationDelegate {
     private var tap: EventTap?
     private var remapped = false
     private var pollTimer: Timer?
+    private var healthTimer: Timer?
     private var settingsURL = ""
     private var askedForAccessibility = false
 
@@ -63,6 +64,8 @@ final class Controller: NSObject, NSApplicationDelegate {
     private func teardown() {
         pollTimer?.invalidate()
         pollTimer = nil
+        healthTimer?.invalidate()
+        healthTimer = nil
         tap?.stop()
         tap = nil
         if remapped { CapsLockRemap.disable(); remapped = false }
@@ -91,7 +94,9 @@ final class Controller: NSObject, NSApplicationDelegate {
             settingsURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
             return false
         }
-        let t = EventTap(config: config) { [weak self] lang in self?.switchTo(lang) }
+        let t = EventTap(config: config,
+                         onSwitch: { [weak self] lang in self?.switchTo(lang) },
+                         onDisabled: { [weak self] in self?.tapWasDisabled() })
         guard t.start() else {
             state = .needsInputMonitoring
             settingsURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
@@ -101,7 +106,29 @@ final class Controller: NSObject, NSApplicationDelegate {
         // タップが動いてから差し替える (動かないのに Caps Lock だけ効かなくなるのを防ぐ)
         if config.capsLock != .none { CapsLockRemap.enable(); remapped = true }
         state = .running
+        startHealthCheck()
         return true
+    }
+
+    /// システムにタップを止められた。権限が外されているなら潔く手放し、あるなら再開する。
+    private func tapWasDisabled() {
+        if AXIsProcessTrusted() { tap?.reenable() } else { permissionLost() }
+    }
+
+    /// 動作中に権限が外された。タップと Caps Lock の差し替えを直ちに解除して許可待ちに戻る
+    /// (タップを持ったまま権限を失うと、キー入力が固まることがある)。
+    private func permissionLost() {
+        teardown()
+        if !tryStart() { startPolling() }
+        refresh()
+    }
+
+    /// 権限が外されたことをタップが止められる前に気づくための見張り (1 秒ごと)。
+    private func startHealthCheck() {
+        healthTimer?.invalidate()
+        healthTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            if !AXIsProcessTrusted() { self?.permissionLost() }
+        }
     }
 
     /// 権限が許可されるまで 2 秒ごとに再試行する (許可後に再起動しなくてよい)。
