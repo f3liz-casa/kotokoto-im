@@ -6,6 +6,10 @@ if args.contains("--list") {
     InputSources.printEnabled()
     exit(0)
 }
+if args.contains("--bench") {
+    InputSources.bench()
+    exit(0)
+}
 if args.contains("--reset") {
     CapsLockRemap.disable()
     print("Caps Lock の割り当てを元に戻しました。")
@@ -15,6 +19,7 @@ if args.contains("--help") || args.contains("-h") {
     print("""
     kotokoto-im: メニューバー常駐の入力ソース切り替え (既定: Caps Lock=韓国語 / 左⌘=英語 / 右⌘=日本語)
       --list    有効な入力ソース ID を表示
+      --bench   入力ソースの切り替え時間を測る (終わると元の入力ソースに戻る)
       --reset   強制終了などで残った Caps Lock の割り当てを元に戻す
     設定: \(Controller.configURL.path) (メニューの「設定ファイルを開く」から雛形を作れます)
     """)

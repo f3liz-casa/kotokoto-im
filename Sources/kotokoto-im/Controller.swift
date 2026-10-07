@@ -30,6 +30,7 @@ final class Controller: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
+        InputSources.observeChanges()
         reload()
     }
 
@@ -47,6 +48,7 @@ final class Controller: NSObject, NSApplicationDelegate {
 
     @objc private func reload() {
         teardown()
+        InputSources.invalidate()
         loadConfig()
         if !tryStart() { startPolling() }
         refresh()
