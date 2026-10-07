@@ -127,6 +127,11 @@ final class EventTap {
                 return nil
             }
             detector.otherInput()
+            if Trace.enabled && type == .keyDown && event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+                // どのキーかは記録しない (時刻と入力ソースだけ)。ログの書き込みはコールバックの外で行う
+                let held = holding
+                DispatchQueue.main.async { Trace.log("キー入力\(held ? " (預かる)" : "") 現在=\(InputSources.currentID() ?? "?")") }
+            }
             if holding, let copy = event.copy() {
                 heldEvents.append(copy)
                 if heldEvents.count >= maxHeld { endHold() }
