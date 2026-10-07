@@ -10,6 +10,9 @@ enum CapsLockRemap {
     private static let capsLockUsage = 0x700000039
     private static let f18Usage = 0x70000006D
 
+    /// hidutil は数百 ms かかることがある。メインスレッド (= キー入力を処理する側) を止めないよう、専用のキューで実行する。
+    private static let queue = DispatchQueue(label: "casa.f3liz.kotokoto-im.hidutil")
+
     private static func hidutil(_ json: String) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/hidutil")
@@ -19,13 +22,24 @@ enum CapsLockRemap {
         p.waitUntilExit()
     }
 
-    static func enable() {
-        hidutil("""
+    private static var enableJSON: String {
+        """
         {"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":\(capsLockUsage),"HIDKeyboardModifierMappingDst":\(f18Usage)}]}
-        """)
+        """
+    }
+    private static let disableJSON = #"{"UserKeyMapping":[]}"#
+
+    /// 順序は保たれる (enable → disable の順に呼べば、その順に実行される)。
+    static func enable() {
+        queue.async { hidutil(enableJSON) }
     }
 
     static func disable() {
-        hidutil(#"{"UserKeyMapping":[]}"#)
+        queue.async { hidutil(disableJSON) }
+    }
+
+    /// 終了時用。割り当てを戻し終わるまで待つ (待たないと、戻す前にプロセスが終わる)。
+    static func disableAndWait() {
+        queue.sync { hidutil(disableJSON) }
     }
 }

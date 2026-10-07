@@ -11,7 +11,7 @@ if args.contains("--bench") {
     exit(0)
 }
 if args.contains("--reset") {
-    CapsLockRemap.disable()
+    CapsLockRemap.disableAndWait()
     print("Caps Lock の割り当てを元に戻しました。")
     exit(0)
 }

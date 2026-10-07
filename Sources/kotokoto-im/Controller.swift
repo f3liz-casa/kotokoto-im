@@ -27,6 +27,9 @@ final class Controller: NSObject, NSApplicationDelegate {
     private var state: State = .needsAccessibility
     private var tap: EventTap?
     private var remapped = false
+    private var remapGeneration = 0
+    private let remapDelay = 1.0       // タップ開始から Caps Lock を差し替えるまでの待ち (秒)
+    private var suspendStamps: [UInt64] = []
     private var pollTimer: Timer?
     private var timeoutStamps: [UInt64] = []
     private var healthTimer: Timer?
@@ -55,12 +58,12 @@ final class Controller: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        teardown()
+        teardown(wait: true)
     }
 
     /// Ctrl-C / kill 用。Caps Lock の割り当てを戻してから終了する。
     func shutdown() -> Never {
-        teardown()
+        teardown(wait: true)
         exit(0)
     }
 
@@ -74,7 +77,8 @@ final class Controller: NSObject, NSApplicationDelegate {
         refresh()
     }
 
-    private func teardown() {
+    private func teardown(wait: Bool = false) {
+        remapGeneration += 1 // まだ実行されていない Caps Lock の差し替えを取り消す
         pollTimer?.invalidate()
         pollTimer = nil
         healthTimer?.invalidate()
@@ -82,7 +86,10 @@ final class Controller: NSObject, NSApplicationDelegate {
         tap?.endHold()
         tap?.stop()
         tap = nil
-        if remapped { CapsLockRemap.disable(); remapped = false }
+        if remapped {
+            if wait { CapsLockRemap.disableAndWait() } else { CapsLockRemap.disable() }
+            remapped = false
+        }
     }
 
     private func loadConfig() {
@@ -119,8 +126,18 @@ final class Controller: NSObject, NSApplicationDelegate {
             return false
         }
         tap = t
-        // タップが動いてから差し替える (動かないのに Caps Lock だけ効かなくなるのを防ぐ)
-        if config.capsLock != .none { CapsLockRemap.enable(); remapped = true }
+        // タップが動いてから差し替える (動かないのに Caps Lock だけ効かなくなるのを防ぐ)。
+        // さらに少し待ち、タップがすぐ止められなかったときだけ行う (権限が外れかけているときに、
+        // 開始と解除を繰り返して hidutil を何度も起動するのを避ける)。
+        remapGeneration += 1
+        let mine = remapGeneration
+        if config.capsLock != .none {
+            DispatchQueue.main.asyncAfter(deadline: .now() + remapDelay) { [weak self] in
+                guard let self = self, self.remapGeneration == mine, self.tap === t else { return }
+                CapsLockRemap.enable()
+                self.remapped = true
+            }
+        }
         state = .running
         startHealthCheck()
         return true
@@ -132,6 +149,7 @@ final class Controller: NSObject, NSApplicationDelegate {
     ///   その繰り返しで入力が固まる。再開は少し待ってから (`startPolling`) 確かめ直す。
     /// - コールバックが遅かった (timeout): 再開するが、短時間に繰り返すなら手放す。
     private func tapWasDisabled(_ reason: TapDisabledReason) {
+        guard tap != nil else { return } // すでに手放したあとに届いた通知は無視する
         Trace.log("タップが止められた: \(reason) 信頼=\(AXIsProcessTrusted())")
         switch reason {
         case .userInput:
@@ -149,7 +167,13 @@ final class Controller: NSObject, NSApplicationDelegate {
         timeoutStamps = []
         state = AXIsProcessTrusted() ? .restarting : .needsAccessibility
         settingsURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        startPolling()
+        // 繰り返し止められるなら、再開の間隔を倍々に延ばす (最大 30 秒)。権限の状態が食い違っていると、
+        // 再開と停止を繰り返してキー入力が滞るため。
+        let now = DispatchTime.now().uptimeNanoseconds
+        suspendStamps = suspendStamps.filter { now - $0 < 60_000_000_000 } + [now]
+        let interval = min(30.0, 2.0 * pow(2.0, Double(suspendStamps.count - 1)))
+        Trace.log("手放した。再確認まで \(Int(interval)) 秒 (60 秒間に \(suspendStamps.count) 回目)")
+        startPolling(interval: interval)
         refresh()
     }
 
@@ -167,8 +191,9 @@ final class Controller: NSObject, NSApplicationDelegate {
     }
 
     /// 権限が許可されるまで 2 秒ごとに再試行する (許可後に再起動しなくてよい)。
-    private func startPolling() {
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+    private func startPolling(interval: Double = 2) {
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             guard let self = self, self.tryStart() else { self?.refresh(); return }
             self.pollTimer?.invalidate()
             self.pollTimer = nil
