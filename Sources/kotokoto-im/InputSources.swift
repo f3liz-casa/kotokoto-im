@@ -5,11 +5,17 @@ import KotokotoCore
 /// Text Input Source Services を使った入力ソースの選択。
 enum InputSources {
     /// 優先して探す入力ソース ID。見つからなければ言語コードで探す。
-    private static let candidates: [Language: (ids: [String], lang: String)] = [
-        .english: (["com.apple.keylayout.ABC", "com.apple.keylayout.US"], "en"),
+    /// `skipSuffixes` は言語コードで探すときに除く入力モード (日本語入力のカタカナ・英数など)。
+    private static let candidates: [Language: (ids: [String], lang: String, skipSuffixes: [String])] = [
+        .english: (["com.apple.keylayout.ABC", "com.apple.keylayout.US"], "en", []),
+        // 日本語: 標準の「日本語 - ローマ字入力」「かな入力」、Mozc (OSS 版)、Google 日本語入力。
+        // 複数入れている場合は先に書いたものが優先。変えたいときは設定の inputSources で指定する。
         .japanese: (["com.apple.inputmethod.Kotoeri.RomajiTyping.Japanese",
-                     "com.apple.inputmethod.Kotoeri.KanaTyping.Japanese"], "ja"),
-        .korean: (["com.apple.inputmethod.Korean.2SetKorean"], "ko"),
+                     "com.apple.inputmethod.Kotoeri.KanaTyping.Japanese",
+                     "org.mozc.inputmethod.Japanese.base",
+                     "com.google.inputmethod.Japanese.base"], "ja",
+                    ["Katakana", "HalfWidthKana", "HalfWidthKatakana", "FullWidthRoman", "Roman"]),
+        .korean: (["com.apple.inputmethod.Korean.2SetKorean"], "ko", []),
     ]
 
     private static func enabledSources() -> [TISInputSource] {
@@ -45,6 +51,7 @@ enum InputSources {
         }.first
         let byLang = sources.first {
             languages($0).first == spec.lang
+                && !spec.skipSuffixes.contains { suffix in string($0, kTISPropertyInputSourceID)?.hasSuffix("." + suffix) == true }
                 && (language != .english || string($0, kTISPropertyInputSourceType) == kTISTypeKeyboardLayout as String)
         }
         let target = byID ?? byLang
