@@ -23,5 +23,11 @@ cp packaging/Info.plist "$APP/Contents/Info.plist"
 # 再ビルド後は許可をやり直す必要がある。固定したい場合は自分の証明書名を CODESIGN_IDENTITY に)。
 codesign --force --sign "${CODESIGN_IDENTITY:--}" --identifier casa.f3liz.kotokoto-im "$APP"
 
+if [ -z "${CODESIGN_IDENTITY:-}" ]; then
+    echo "注意: ad-hoc 署名です。再ビルドのたびに署名が変わるため、アクセシビリティの許可が無効になります。"
+    echo "      オンのままでも効かないときは、設定の一覧から kotokoto-im を削除(−)して追加し直すか、次を実行:"
+    echo "        tccutil reset Accessibility casa.f3liz.kotokoto-im"
+    echo "      毎回やり直したくない場合は、自分のコード署名証明書を CODESIGN_IDENTITY に渡してください (README 参照)。"
+fi
 echo "できました: $APP"
 echo "起動: open $APP"

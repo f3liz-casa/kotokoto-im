@@ -16,6 +16,7 @@ final class Controller: NSObject, NSApplicationDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let statusLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let warningLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let hintLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let settingsItem = NSMenuItem(title: "", action: #selector(openPrivacySettings), keyEquivalent: "")
 
     private var config = Config()
@@ -176,7 +177,7 @@ final class Controller: NSObject, NSApplicationDelegate {
 
     private func buildMenu() {
         let menu = NSMenu()
-        for i in [statusLine, warningLine, settingsItem] { i.target = self; menu.addItem(i) }
+        for i in [statusLine, warningLine, hintLine, settingsItem] { i.target = self; menu.addItem(i) }
         menu.addItem(.separator())
         let reloadItem = NSMenuItem(title: "設定を再読み込み", action: #selector(reload), keyEquivalent: "r")
         let openItem = NSMenuItem(title: "設定ファイルを開く", action: #selector(openConfig), keyEquivalent: ",")
@@ -194,14 +195,19 @@ final class Controller: NSObject, NSApplicationDelegate {
         case .running:
             statusLine.title = "動作中: " + bindingSummary()
             settingsItem.isHidden = true
+            hintLine.isHidden = true
         case .needsAccessibility:
             statusLine.title = "アクセシビリティの許可が必要です"
             settingsItem.title = "アクセシビリティ設定を開く…"
             settingsItem.isHidden = false
+            // 再ビルドで署名が変わると、一覧でオンでも許可として扱われないことがある
+            hintLine.title = "オンなのに変わらない場合: 一覧から kotokoto-im を削除(−)し、アプリを追加し直してください"
+            hintLine.isHidden = false
         case .needsInputMonitoring:
             statusLine.title = "入力監視の許可が必要です"
             settingsItem.title = "入力監視の設定を開く…"
             settingsItem.isHidden = false
+            hintLine.isHidden = true
         }
         warningLine.title = warning ?? ""
         warningLine.isHidden = warning == nil
