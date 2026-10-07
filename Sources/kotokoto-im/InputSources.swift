@@ -86,6 +86,18 @@ enum InputSources {
         return "\(language.displayName)への切り替えに失敗しました。"
     }
 
+    /// 英数 (102) / かな (104) キーを送る (⌘英かな と同じ方式)。フラグは空。
+    /// 切り替えは macOS が行う。入力メソッドが処理しないモードで送ると、制御文字 (U+0010) が入力されることがある。
+    /// 目印を付けて、自分のタップがキーを預かってしまうのを避ける。
+    static func postKey(_ code: CGKeyCode) {
+        for isDown in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: isDown) else { return }
+            event.flags = []
+            event.setIntegerValueField(.eventSourceUserData, value: EventTap.replayMarker)
+            event.post(tap: .cghidEventTap)
+        }
+    }
+
     /// 入力ソースの有効/無効が変わったら呼ばれる (システム設定での追加・削除)。
     static func observeChanges() {
         DistributedNotificationCenter.default().addObserver(

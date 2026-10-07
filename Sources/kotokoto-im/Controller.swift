@@ -223,8 +223,19 @@ final class Controller: NSObject, NSApplicationDelegate {
         let preferred = config.inputSources[language.rawValue] ?? []
         let willChange = !InputSources.isCurrent(language, preferred: preferred)
         Trace.log("実行 \(language.displayName): 現在=\(InputSources.currentID() ?? "?") 切り替わる=\(willChange)")
-        let failure = InputSources.select(language, preferred: preferred)
-        Trace.log("select 結果: \(failure ?? "OK") 現在=\(InputSources.currentID() ?? "?")")
+        let method: Method = language == .english ? config.englishMethod
+            : language == .japanese ? config.japaneseMethod : .inputSource
+        var failure: String?
+        if method == .key {
+            // 英数 / かなキーに任せる。すでに狙いの入力ソースなら何もしない (処理されないキーは文字として入力されるため)
+            if willChange {
+                InputSources.postKey(language == .english ? 102 : 104)
+                Trace.log("キー送信: \(language == .english ? "英数" : "かな")")
+            }
+        } else {
+            failure = InputSources.select(language, preferred: preferred)
+            Trace.log("select 結果: \(failure ?? "OK") 現在=\(InputSources.currentID() ?? "?")")
+        }
         if failure != switchWarning { switchWarning = failure; refresh() }
         guard failure == nil else { return }
         if willChange { holdKeys(until: language, preferred: preferred) }
@@ -234,6 +245,7 @@ final class Controller: NSObject, NSApplicationDelegate {
             let ok = InputSources.isCurrent(language, preferred: preferred)
             Trace.log("確認 (+\(Int(self.verifyDelay * 1000)) ms): 現在=\(InputSources.currentID() ?? "?") 一致=\(ok)")
             if !ok {
+                // (キー方式では、切り替わらなかったときの代わりにもなる)
                 // 覚えていた参照が古くて効いていない可能性があるので、引き直してから選び直す
                 InputSources.invalidate()
                 let retry = InputSources.select(language, preferred: preferred)

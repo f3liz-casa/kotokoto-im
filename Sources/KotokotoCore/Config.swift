@@ -7,6 +7,13 @@ public enum Target: String, Codable, Equatable {
     public var language: Language? { Language(rawValue: rawValue) }
 }
 
+/// 切り替えの方法。
+/// - inputSource: 入力ソースを直接選ぶ (既定)。
+/// - key: 英数 / かなキーのイベントを送り、切り替えを macOS に任せる (⌘英かな と同じ方式)。
+public enum Method: String, Codable, Equatable {
+    case inputSource, key
+}
+
 /// ~/.config/kotokoto-im/config.json。書かれていない項目は既定値になる。
 public struct Config: Codable, Equatable {
     public var capsLock: Target = .korean
@@ -17,13 +24,16 @@ public struct Config: Codable, Equatable {
     /// 言語ごとに優先して使う入力ソース ID (例: {"korean": ["com.apple.inputmethod.Korean.3SetKorean"]})。
     /// `kotokoto-im --list` で ID を確認できる。
     public var inputSources: [String: [String]] = [:]
+    /// 英語・日本語へ切り替える方法 (実験的)。`key` は英数 / かなキーを送る。
+    public var englishMethod: Method = .inputSource
+    public var japaneseMethod: Method = .inputSource
     /// 切り替えの経緯を ~/Library/Logs/kotokoto-im.log に書く (診断用)。
     public var trace: Bool = false
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case capsLock, leftCommand, rightCommand, maxTapDuration, inputSources, trace
+        case capsLock, leftCommand, rightCommand, maxTapDuration, inputSources, englishMethod, japaneseMethod, trace
     }
 
     public struct Invalid: Error, CustomStringConvertible {
@@ -38,6 +48,8 @@ public struct Config: Codable, Equatable {
         rightCommand = try c.decodeIfPresent(Target.self, forKey: .rightCommand) ?? d.rightCommand
         maxTapDuration = try c.decodeIfPresent(Double.self, forKey: .maxTapDuration) ?? d.maxTapDuration
         inputSources = try c.decodeIfPresent([String: [String]].self, forKey: .inputSources) ?? d.inputSources
+        englishMethod = try c.decodeIfPresent(Method.self, forKey: .englishMethod) ?? d.englishMethod
+        japaneseMethod = try c.decodeIfPresent(Method.self, forKey: .japaneseMethod) ?? d.japaneseMethod
         trace = try c.decodeIfPresent(Bool.self, forKey: .trace) ?? d.trace
         guard maxTapDuration > 0 else { throw Invalid(description: "maxTapDuration は 0 より大きい値にしてください") }
     }
