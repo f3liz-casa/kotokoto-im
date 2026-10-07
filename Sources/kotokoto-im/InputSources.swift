@@ -49,10 +49,11 @@ enum InputSources {
         let byID = (preferred + spec.ids).lazy.compactMap { id in
             sources.first { string($0, kTISPropertyInputSourceID) == id }
         }.first
-        let byLang = sources.first {
-            languages($0).first == spec.lang
-                && !spec.skipSuffixes.contains { suffix in string($0, kTISPropertyInputSourceID)?.hasSuffix("." + suffix) == true }
-                && (language != .english || string($0, kTISPropertyInputSourceType) == kTISTypeKeyboardLayout as String)
+        let byLang = sources.first { source in
+            guard languages(source).first == spec.lang else { return false }
+            let id = string(source, kTISPropertyInputSourceID) ?? ""
+            if spec.skipSuffixes.contains(where: { id.hasSuffix("." + $0) }) { return false }
+            return language != .english || string(source, kTISPropertyInputSourceType) == kTISTypeKeyboardLayout as String
         }
         let target = byID ?? byLang
         if let target = target { cache[language] = target } // 見つからなかった結果は覚えない (後から追加されうる)
