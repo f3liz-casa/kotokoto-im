@@ -86,23 +86,6 @@ enum InputSources {
         return "\(language.displayName)への切り替えに失敗しました。"
     }
 
-    /// 「かな」キー (kVK_JIS_Kana) の押下/解放を送る。Mozc / Google 日本語入力は、入力ソースが日本語に
-    /// なっても内部が直接入力モードのままのことがあり、このキーでひらがなモードになる。
-    /// 日本語入力が有効なときだけ送ること。有効でないと、キーは消費されず制御文字 (U+0010) として入力される。
-    /// 目印を付けて、自分のタップがキーを預かってしまうのを避ける。フラグは空にする。
-    static func postKana(isDown: Bool) {
-        guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 104, keyDown: isDown) else { return }
-        event.flags = []
-        event.setIntegerValueField(.eventSourceUserData, value: EventTap.replayMarker)
-        event.post(tap: .cghidEventTap)
-    }
-
-    /// 現在の入力ソースが、切り替え後に「かな」キーが要る IME (Mozc / Google 日本語入力) か。
-    static func currentNeedsKanaKey() -> Bool {
-        guard let id = currentID() else { return false }
-        return id.hasPrefix("org.mozc.") || id.hasPrefix("com.google.inputmethod.")
-    }
-
     /// 入力ソースの有効/無効が変わったら呼ばれる (システム設定での追加・削除)。
     static func observeChanges() {
         DistributedNotificationCenter.default().addObserver(

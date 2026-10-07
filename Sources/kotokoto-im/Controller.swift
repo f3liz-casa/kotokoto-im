@@ -43,7 +43,6 @@ final class Controller: NSObject, NSApplicationDelegate {
     private var generation = 0
 
     private let landingDelay = 0.03    // 切り替えの通知から、入力先が使えるようになるまでの余裕 (秒)
-    private let kanaKeyGap = 0.01      // 「かな」キーの押下と解放の間 (秒)
     private let holdTimeout = 0.3      // 通知が来なくてもキーを預かるのはこの時間まで (秒)
     private var holdGeneration = 0
     private var holdTarget: (language: Language, preferred: [String])?
@@ -258,25 +257,12 @@ final class Controller: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 預かったキーを返す。日本語に切り替えたあとで Mozc / Google 日本語入力なら、先に「かな」キーを送って
-    /// ひらがなモードにする (そのあとにキーを返すので、切り替え中に打った文字も日本語になる)。
+    /// 預かったキーを返す。
     private func releaseHeldKeys(_ reason: String) {
-        guard let target = holdTarget else { return } // 二重に呼ばれても一度だけ
+        guard holdTarget != nil else { return } // 二重に呼ばれても一度だけ
         holdTarget = nil
-        let mine = holdGeneration
-        guard config.sendKanaKey, target.language == .japanese, InputSources.currentNeedsKanaKey() else {
-            let count = tap?.endHold() ?? 0
-            Trace.log("キーを返す (\(reason)): \(count) 件")
-            return
-        }
-        Trace.log("かなキーを送る (\(reason))")
-        InputSources.postKana(isDown: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + kanaKeyGap) { [weak self] in
-            InputSources.postKana(isDown: false) // 押しっぱなしにしないよう、必ず解放する
-            guard let self = self, self.holdGeneration == mine else { return }
-            let count = self.tap?.endHold() ?? 0
-            Trace.log("キーを返す (かなキーのあと): \(count) 件")
-        }
+        let count = tap?.endHold() ?? 0
+        Trace.log("キーを返す (\(reason)): \(count) 件")
     }
 
     /// 入力ソースが切り替わった通知。狙いどおりなら、入力先の準備を少し待ってから預かったキーを送る。

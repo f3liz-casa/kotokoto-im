@@ -15,11 +15,6 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(c.maxTapDuration, 0.3)
     }
 
-    func testSendKanaKeyDefaultsToFalseAndCanBeEnabled() throws {
-        XCTAssertFalse(Config().sendKanaKey)
-        XCTAssertTrue(try Config.parse(Data(#"{"sendKanaKey":true}"#.utf8)).sendKanaKey)
-    }
-
     func testTraceDefaultsToFalse() throws {
         XCTAssertFalse(Config().trace)
         XCTAssertTrue(try Config.parse(Data(#"{"trace":true}"#.utf8)).trace)
