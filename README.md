@@ -35,13 +35,22 @@ macOS の入力ソースを 1 キーで切り替える、メニューバー常�
 ## 使い方
 
 ```sh
-swift build -c release
-.build/release/kotokoto-im            # 起動 (メニューバーに「言」)
-.build/release/kotokoto-im --list     # 有効な入力ソース ID の確認
-.build/release/kotokoto-im --bench    # 切り替えにかかる時間を測る
-.build/release/kotokoto-im --reset    # 強制終了で残った Caps Lock の割り当てを戻す
+scripts/bundle.sh                     # build/kotokoto-im.app を作る (Dock に出ないアプリとして動く)
+open build/kotokoto-im.app            # 起動 (メニューバーに「言」)
+CONFIG=debug scripts/bundle.sh        # 確認用の debug ビルド (速い)
+```
+
+コマンドライン用の操作は .app の中の実行ファイルで行います(`swift build` した `.build/release/kotokoto-im` でも同じ)。
+
+```sh
+APP=build/kotokoto-im.app/Contents/MacOS/kotokoto-im
+$APP --list     # 有効な入力ソース ID の確認
+$APP --bench    # 切り替えにかかる時間を測る
+$APP --reset    # 強制終了で残った Caps Lock の割り当てを戻す
 swift test
 ```
+
+`scripts/bundle.sh` は ad-hoc 署名をするので、再ビルドすると許可をやり直すことがあります(`CODESIGN_IDENTITY` に自分の証明書名を渡すと固定できます)。
 
 初回起動時に **アクセシビリティ**(場合により **入力監視**)の許可が必要です。メニューのリンクから設定画面を開けます。
 システム設定 > キーボード > 入力ソース で、英語(ABC/US)・日本語(ローマ字入力)・韓国語(2 セット)を追加しておいてください。
