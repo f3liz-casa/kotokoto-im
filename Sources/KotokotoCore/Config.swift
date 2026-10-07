@@ -17,11 +17,14 @@ public struct Config: Codable, Equatable {
     /// 言語ごとに優先して使う入力ソース ID (例: {"korean": ["com.apple.inputmethod.Korean.3SetKorean"]})。
     /// `kotokoto-im --list` で ID を確認できる。
     public var inputSources: [String: [String]] = [:]
+    /// 日本語に切り替えた直後に「かな」キーのイベントを送り、日本語入力をひらがなモードに確実に合わせる。
+    /// 切り替えが速いと「表示は日本語なのに英語が入力される」ことがあるための対策。
+    public var sendKanaKey: Bool = true
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case capsLock, leftCommand, rightCommand, maxTapDuration, inputSources
+        case capsLock, leftCommand, rightCommand, maxTapDuration, inputSources, sendKanaKey
     }
 
     public struct Invalid: Error, CustomStringConvertible {
@@ -36,6 +39,7 @@ public struct Config: Codable, Equatable {
         rightCommand = try c.decodeIfPresent(Target.self, forKey: .rightCommand) ?? d.rightCommand
         maxTapDuration = try c.decodeIfPresent(Double.self, forKey: .maxTapDuration) ?? d.maxTapDuration
         inputSources = try c.decodeIfPresent([String: [String]].self, forKey: .inputSources) ?? d.inputSources
+        sendKanaKey = try c.decodeIfPresent(Bool.self, forKey: .sendKanaKey) ?? d.sendKanaKey
         guard maxTapDuration > 0 else { throw Invalid(description: "maxTapDuration は 0 より大きい値にしてください") }
     }
 

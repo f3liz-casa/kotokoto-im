@@ -76,13 +76,15 @@ Caps Lock を押してから切り替わるまでの経路で、次のことを�
   "leftCommand": "english",
   "rightCommand": "japanese",
   "maxTapDuration": 0.5,
-  "inputSources": { "japanese": ["org.mozc.inputmethod.Japanese.base"] }
+  "inputSources": { "japanese": ["org.mozc.inputmethod.Japanese.base"] },
+  "sendKanaKey": true
 }
 ```
 
 - `capsLock` / `leftCommand` / `rightCommand`: `english` `japanese` `korean` `none`。`capsLock` を `none` にすると Caps Lock の差し替え自体を行いません。
 - `maxTapDuration`: ⌘ をこの秒数より長く押すとタップとみなしません。
 - `inputSources`: 言語ごとに優先する入力ソース ID(`--list` で確認)。
+- `sendKanaKey`: 日本語に切り替えた直後に「かな」キー(JIS)のイベントも送り、日本語入力をひらがなモードに合わせます(既定 `true`)。素早く往復したときに「表示は日本語なのに英語が入力される」のを防ぐためです。不要なら `false`。
 
 ## 仕組み
 

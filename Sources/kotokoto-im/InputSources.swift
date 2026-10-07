@@ -1,4 +1,5 @@
 import Carbon
+import CoreGraphics
 import Foundation
 import KotokotoCore
 
@@ -74,15 +75,29 @@ enum InputSources {
     /// 入力ソースを選ぶ。成功なら nil、失敗なら利用者向けの説明を返す。
     /// `preferred` は設定ファイルで指定された ID (既定の候補より先に探す)。
     /// メインスレッドから呼ぶこと (TIS の要件)。
-    static func select(_ language: Language, preferred: [String] = []) -> String? {
+    /// `sendKanaKey` が true で日本語のときは、切り替え後に「かな」キーも送る。
+    static func select(_ language: Language, preferred: [String] = [], sendKanaKey: Bool = false) -> String? {
         guard candidates[language] != nil else { return nil }
         guard let target = resolve(language, preferred: preferred) else {
             return "\(language.displayName)の入力ソースが有効ではありません。システム設定 > キーボード > 入力ソース で追加してください。"
         }
         // すでにその入力ソースでも選び直す (表示と実際の入力がずれたとき、もう一度押して直せるように)
-        if TISSelectInputSource(target) == noErr { return nil }
+        if TISSelectInputSource(target) == noErr {
+            if sendKanaKey && language == .japanese { postKanaKey() }
+            return nil
+        }
         invalidate() // 古い参照かもしれないので次回は引き直す
         return "\(language.displayName)への切り替えに失敗しました。"
+    }
+
+    /// 「かな」キー (JIS キーボードのかなキー、kVK_JIS_Kana) を送る。
+    /// キー入力と同じ流れで届くので、入力先アプリに対して順序が保たれる。日本語入力はこれでひらがなモードになる。
+    private static func postKanaKey() {
+        for isDown in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 104, keyDown: isDown) else { return }
+            event.flags = []
+            event.post(tap: .cghidEventTap)
+        }
     }
 
     /// 入力ソースの有効/無効が変わったら呼ばれる (システム設定での追加・削除)。
