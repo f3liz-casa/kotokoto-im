@@ -64,6 +64,13 @@ enum InputSources {
         string(TISCopyCurrentKeyboardInputSource().takeRetainedValue(), kTISPropertyInputSourceID)
     }
 
+    /// 狙いの入力ソースが現在の入力ソースか (切り替え後の確認用)。判断できなければ true。
+    static func isCurrent(_ language: Language, preferred: [String] = []) -> Bool {
+        guard let target = resolve(language, preferred: preferred),
+              let id = string(target, kTISPropertyInputSourceID) else { return true }
+        return id == currentID()
+    }
+
     /// 入力ソースを選ぶ。成功なら nil、失敗なら利用者向けの説明を返す。
     /// `preferred` は設定ファイルで指定された ID (既定の候補より先に探す)。
     /// メインスレッドから呼ぶこと (TIS の要件)。
@@ -72,8 +79,7 @@ enum InputSources {
         guard let target = resolve(language, preferred: preferred) else {
             return "\(language.displayName)の入力ソースが有効ではありません。システム設定 > キーボード > 入力ソース で追加してください。"
         }
-        // すでにそれなら何もしない (無駄な切り替え処理を避ける)
-        if let id = string(target, kTISPropertyInputSourceID), id == currentID() { return nil }
+        // すでにその入力ソースでも選び直す (表示と実際の入力がずれたとき、もう一度押して直せるように)
         if TISSelectInputSource(target) == noErr { return nil }
         invalidate() // 古い参照かもしれないので次回は引き直す
         return "\(language.displayName)への切り替えに失敗しました。"

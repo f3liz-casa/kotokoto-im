@@ -28,6 +28,12 @@ final class Controller: NSObject, NSApplicationDelegate {
     private var settingsURL = ""
     private var askedForAccessibility = false
 
+    private let settleInterval = 0.08  // これより短い間隔の切り替えはまとめる (秒)
+    private let verifyDelay = 0.06     // 切り替え後にこの時間待って確認する (秒)
+    private var lastSwitchAt = DispatchTime(uptimeNanoseconds: 0)
+    private var pendingSwitch: DispatchWorkItem?
+    private var generation = 0
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
         InputSources.observeChanges()
@@ -108,9 +114,35 @@ final class Controller: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// 切り替え要求。前の切り替えから間もないときは、落ち着くまで待って最後の要求だけ行う
+    /// (英語⇔日本語を素早く往復すると、表示は日本語なのに英語が入力される問題への対策)。
+    /// 間隔が空いているときは待たずに即座に切り替える。
     private func switchTo(_ language: Language) {
-        let failure = InputSources.select(language, preferred: config.inputSources[language.rawValue] ?? [])
+        pendingSwitch?.cancel()
+        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - lastSwitchAt.uptimeNanoseconds) / 1e9
+        if elapsed >= settleInterval {
+            perform(language)
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in self?.perform(language) }
+        pendingSwitch = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + (settleInterval - elapsed), execute: work)
+    }
+
+    private func perform(_ language: Language) {
+        lastSwitchAt = DispatchTime.now()
+        generation += 1
+        let mine = generation
+        let preferred = config.inputSources[language.rawValue] ?? []
+        let failure = InputSources.select(language, preferred: preferred)
         if failure != switchWarning { switchWarning = failure; refresh() }
+        guard failure == nil else { return }
+        // 切り替えが IME 側で戻されていたら一度だけ選び直す (間に別の切り替えが入っていたら何もしない)
+        DispatchQueue.main.asyncAfter(deadline: .now() + verifyDelay) { [weak self] in
+            guard let self = self, self.generation == mine,
+                  !InputSources.isCurrent(language, preferred: preferred) else { return }
+            _ = InputSources.select(language, preferred: preferred)
+        }
     }
 
     // MARK: - メニュー
