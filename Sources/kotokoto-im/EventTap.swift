@@ -29,7 +29,7 @@ final class EventTap {
     private var heldEvents: [CGEvent] = []
     private let maxHeld = 128
     /// 送り直したイベントの目印。自分のタップで再び預からないようにする。
-    private let replayMarker: Int64 = 0x4B4F544F // "KOTO"
+    static let replayMarker: Int64 = 0x4B4F544F // "KOTO"
 
     // NX_DEVICELCMDKEY / NX_DEVICERCMDKEY (左右を区別するデバイス依存ビット)
     private let leftCmdBit: UInt64 = 0x08
@@ -90,7 +90,7 @@ final class EventTap {
         let events = heldEvents
         heldEvents = []
         for event in events {
-            event.setIntegerValueField(.eventSourceUserData, value: replayMarker)
+            event.setIntegerValueField(.eventSourceUserData, value: EventTap.replayMarker)
             event.post(tap: .cghidEventTap)
         }
         return events.count
@@ -117,7 +117,7 @@ final class EventTap {
             return pass
 
         case .keyDown, .keyUp:
-            if event.getIntegerValueField(.eventSourceUserData) == replayMarker { return pass }
+            if event.getIntegerValueField(.eventSourceUserData) == EventTap.replayMarker { return pass }
             let code = event.getIntegerValueField(.keyboardEventKeycode)
             // 差し替えが有効なときだけ F18 を消費する (本物の F18 キーを奪わない)
             if code == CapsLockRemap.f18KeyCode, let lang = config.capsLock.language {

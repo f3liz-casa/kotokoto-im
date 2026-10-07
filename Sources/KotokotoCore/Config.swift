@@ -17,8 +17,9 @@ public struct Config: Codable, Equatable {
     /// 言語ごとに優先して使う入力ソース ID (例: {"korean": ["com.apple.inputmethod.Korean.3SetKorean"]})。
     /// `kotokoto-im --list` で ID を確認できる。
     public var inputSources: [String: [String]] = [:]
-    /// 日本語入力が有効になったことを確かめてから「かな」キーのイベントを送り、ひらがなモードに合わせる (実験的)。
-    /// 「表示は日本語なのに英語が入力される」ことへの対策だが、環境によっては制御文字 (U+0010) が入力されるため既定はオフ。
+    /// 日本語への切り替えのあと、Mozc / Google 日本語入力なら「かな」キーを送ってひらがなモードにする (実験的)。
+    /// 入力ソースは日本語になっても IME が直接入力モードのまま、英字が入力されることへの対策。
+    /// 日本語入力が使えるようになる前に送ると制御文字 (U+0010) が入力されることがあるため、既定はオフ。
     public var sendKanaKey: Bool = false
     /// 切り替えの経緯を ~/Library/Logs/kotokoto-im.log に書く (診断用)。
     public var trace: Bool = false
