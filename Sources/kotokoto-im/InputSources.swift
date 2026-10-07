@@ -1,4 +1,5 @@
 import Carbon
+import CoreGraphics
 import Foundation
 import KotokotoCore
 
@@ -18,18 +19,18 @@ enum InputSources {
         .korean: (["com.apple.inputmethod.Korean.2SetKorean"], "ko", []),
     ]
 
-    private static func enabledSources() -> [TISInputSource] {
+    static func enabledSources() -> [TISInputSource] {
         let filter = [kTISPropertyInputSourceIsSelectCapable as String: true] as CFDictionary
         guard let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue() else { return [] }
         return list as? [TISInputSource] ?? []
     }
 
-    private static func string(_ source: TISInputSource, _ key: CFString) -> String? {
+    static func string(_ source: TISInputSource, _ key: CFString) -> String? {
         guard let p = TISGetInputSourceProperty(source, key) else { return nil }
         return Unmanaged<CFString>.fromOpaque(p).takeUnretainedValue() as String
     }
 
-    private static func languages(_ source: TISInputSource) -> [String] {
+    static func languages(_ source: TISInputSource) -> [String] {
         guard let p = TISGetInputSourceProperty(source, kTISPropertyInputSourceLanguages) else { return [] }
         return (Unmanaged<CFArray>.fromOpaque(p).takeUnretainedValue() as? [String]) ?? []
     }
@@ -42,7 +43,7 @@ enum InputSources {
         cache.removeAll()
     }
 
-    private static func resolve(_ language: Language, preferred: [String]) -> TISInputSource? {
+    static func resolve(_ language: Language, preferred: [String]) -> TISInputSource? {
         if let hit = cache[language] { return hit }
         guard let spec = candidates[language] else { return nil }
         let sources = enabledSources()
@@ -60,8 +61,20 @@ enum InputSources {
         return target
     }
 
-    private static func currentID() -> String? {
+    static func currentID() -> String? {
         string(TISCopyCurrentKeyboardInputSource().takeRetainedValue(), kTISPropertyInputSourceID)
+    }
+
+    /// 狙いの入力ソースが有効になっているか。
+    static func isAvailable(_ language: Language, preferred: [String] = []) -> Bool {
+        resolve(language, preferred: preferred) != nil
+    }
+
+    /// 狙いの入力ソースが現在の入力ソースか (切り替え後の確認用)。判断できなければ true。
+    static func isCurrent(_ language: Language, preferred: [String] = []) -> Bool {
+        guard let target = resolve(language, preferred: preferred),
+              let id = string(target, kTISPropertyInputSourceID) else { return true }
+        return id == currentID()
     }
 
     /// 入力ソースを選ぶ。成功なら nil、失敗なら利用者向けの説明を返す。
@@ -72,11 +85,22 @@ enum InputSources {
         guard let target = resolve(language, preferred: preferred) else {
             return "\(language.displayName)の入力ソースが有効ではありません。システム設定 > キーボード > 入力ソース で追加してください。"
         }
-        // すでにそれなら何もしない (無駄な切り替え処理を避ける)
-        if let id = string(target, kTISPropertyInputSourceID), id == currentID() { return nil }
+        // すでにその入力ソースでも選び直す (表示と実際の入力がずれたとき、もう一度押して直せるように)
         if TISSelectInputSource(target) == noErr { return nil }
         invalidate() // 古い参照かもしれないので次回は引き直す
         return "\(language.displayName)への切り替えに失敗しました。"
+    }
+
+    /// 英数 (102) / かな (104) キーを送る (⌘英かな と同じ方式)。フラグは空。
+    /// 切り替えは macOS が行う。入力メソッドが処理しないモードで送ると、制御文字 (U+0010) が入力されることがある。
+    /// 目印を付けて、自分のタップがキーを預かってしまうのを避ける。
+    static func postKey(_ code: CGKeyCode) {
+        for isDown in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: isDown) else { return }
+            event.flags = []
+            event.setIntegerValueField(.eventSourceUserData, value: EventTap.replayMarker)
+            event.post(tap: .cghidEventTap)
+        }
     }
 
     /// 入力ソースの有効/無効が変わったら呼ばれる (システム設定での追加・削除)。
@@ -84,26 +108,6 @@ enum InputSources {
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name(kTISNotifyEnabledKeyboardInputSourcesChanged as String),
             object: nil, queue: .main) { _ in invalidate() }
-    }
-
-    /// 切り替え時間を測る (`--bench`)。キャッシュ無し(初回)と有り(2回目以降)を比べる。終わると元の入力ソースに戻す。
-    static func bench() {
-        let original = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
-        func ms(_ body: () -> Void) -> Double {
-            let t = DispatchTime.now().uptimeNanoseconds
-            body()
-            return Double(DispatchTime.now().uptimeNanoseconds - t) / 1e6
-        }
-        for lang in [Language.english, .japanese, .korean, .english, .japanese, .korean] {
-            // 毎回別の入力ソースへ切り替わるよう、順に回す
-            var err: String?
-            let cold = ms { invalidate(); err = select(lang) }
-            if let err = err { print("\(lang.displayName): \(err)"); continue }
-            invalidate(); _ = resolve(lang, preferred: [])
-            let resolveWarm = ms { _ = resolve(lang, preferred: []) }
-            print("\(lang.displayName): 切り替え(キャッシュ無し) \(String(format: "%.2f", cold)) ms / 引き当て(キャッシュ有り) \(String(format: "%.3f", resolveWarm)) ms")
-        }
-        TISSelectInputSource(original)
     }
 
     /// 有効な入力ソース ID を表示する (`--list`)。

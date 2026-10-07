@@ -15,6 +15,27 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(c.maxTapDuration, 0.3)
     }
 
+    func testMethodDefaults() throws {
+        XCTAssertEqual(Config().englishMethod, .inputSource)
+        XCTAssertEqual(Config().japaneseMethod, .key)
+        let c = try Config.parse(Data(#"{"japaneseMethod":"inputSource","englishMethod":"key"}"#.utf8))
+        XCTAssertEqual(c.japaneseMethod, .inputSource)
+        XCTAssertEqual(c.englishMethod, .key)
+        XCTAssertThrowsError(try Config.parse(Data(#"{"englishMethod":"magic"}"#.utf8)))
+    }
+
+    func testMethodForLanguage() throws {
+        let c = try Config.parse(Data(#"{"englishMethod":"key","japaneseMethod":"inputSource"}"#.utf8))
+        XCTAssertEqual(c.method(for: .english), .key)
+        XCTAssertEqual(c.method(for: .japanese), .inputSource)
+        XCTAssertEqual(c.method(for: .korean), .inputSource)
+    }
+
+    func testTraceDefaultsToFalse() throws {
+        XCTAssertFalse(Config().trace)
+        XCTAssertTrue(try Config.parse(Data(#"{"trace":true}"#.utf8)).trace)
+    }
+
     func testUnknownTargetThrows() {
         XCTAssertThrowsError(try Config.parse(Data(#"{"capsLock":"klingon"}"#.utf8)))
     }
