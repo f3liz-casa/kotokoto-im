@@ -162,14 +162,19 @@ final class Controller: NSObject, NSApplicationDelegate {
         generation += 1
         let mine = generation
         let preferred = config.inputSources[language.rawValue] ?? []
-        let failure = InputSources.select(language, preferred: preferred, sendKanaKey: config.sendKanaKey)
+        let failure = InputSources.select(language, preferred: preferred)
         if failure != switchWarning { switchWarning = failure; refresh() }
         guard failure == nil else { return }
         // 切り替えが IME 側で戻されていたら一度だけ選び直す (間に別の切り替えが入っていたら何もしない)
         DispatchQueue.main.asyncAfter(deadline: .now() + verifyDelay) { [weak self] in
-            guard let self = self, self.generation == mine,
-                  !InputSources.isCurrent(language, preferred: preferred) else { return }
-            _ = InputSources.select(language, preferred: preferred, sendKanaKey: self.config.sendKanaKey)
+            guard let self = self, self.generation == mine else { return }
+            if !InputSources.isCurrent(language, preferred: preferred) {
+                _ = InputSources.select(language, preferred: preferred)
+                return
+            }
+            // 日本語入力が実際に有効になったことを確かめてから「かな」キーを送る
+            // (有効でないうちに送ると、アプリに U+0010 が入力されてしまう)
+            if language == .japanese && self.config.sendKanaKey { InputSources.postKanaKey() }
         }
     }
 
