@@ -32,6 +32,16 @@ macOS の入力ソースを 1 キーで切り替える、メニューバー常�
 | 情報の出し方 | 正常時のメニューは現在の割り当てを 1 行だけ。ログや統計は出さない。 |
 | 変えやすさ | 設定は JSON 1 ファイル。メニューの「設定ファイルを開く」で既定値入りの雛形が作られ、「設定を再読み込み」で反映される。 |
 
+## インストール (Homebrew)
+
+```sh
+brew tap f3liz-casa/kotokoto-im https://github.com/f3liz-casa/kotokoto-im
+brew install --HEAD f3liz-casa/kotokoto-im/kotokoto-im
+open "$(brew --prefix kotokoto-im)/kotokoto-im.app"
+```
+
+ソースからビルドします(Xcode が必要)。
+
 ## 使い方
 
 ```sh
