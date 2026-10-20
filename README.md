@@ -32,6 +32,16 @@ macOS の入力ソースを 1 キーで切り替える、メニューバー常�
 | 情報の出し方 | 正常時のメニューは現在の割り当てを 1 行だけ。ログや統計は出さない。 |
 | 変えやすさ | 設定は JSON 1 ファイル。メニューの「設定ファイルを開く」で既定値入りの雛形が作られ、「設定を再読み込み」で反映される。 |
 
+## インストール (Homebrew)
+
+```sh
+brew tap f3liz-casa/kotokoto-im https://github.com/f3liz-casa/kotokoto-im
+brew install --HEAD f3liz-casa/kotokoto-im/kotokoto-im
+open "$(brew --prefix kotokoto-im)/kotokoto-im.app"
+```
+
+ソースからビルドします(Xcode が必要)。
+
 ## 使い方
 
 ```sh
@@ -50,15 +60,15 @@ $APP --reset    # 強制終了で残った Caps Lock の割り当てを戻す
 swift test
 ```
 
-`scripts/bundle.sh` は ad-hoc 署名をするので、再ビルドすると許可をやり直すことがあります(`CODESIGN_IDENTITY` に自分の証明書名を渡すと固定できます)。
+`scripts/bundle.sh` は ad-hoc 署名をします。designated requirement を識別子 `casa.f3liz.kotokoto-im` だけにしているので、再ビルドしてもアクセシビリティの許可はそのまま引き継がれます(許可をやり直す必要はありません)。`CODESIGN_IDENTITY` に自分の証明書名を渡すと、その証明書で署名します。
 
 ### 再ビルドしたら許可が効かなくなったとき
 
-macOS は許可を「アプリの署名」に結び付けています。ad-hoc 署名は再ビルドのたびに変わるので、設定の一覧でオンのままでも、新しいビルドは許可されていない扱いになります。
+ふつうは再ビルドしても許可は残ります。残らなかったときは、既存の許可が古い署名の要件で登録されている可能性があります。
 
-1. システム設定 > プライバシーとセキュリティ > アクセシビリティ で kotokoto-im を削除(−)し、`build/kotokoto-im.app` を追加し直す。
-   または `tccutil reset Accessibility casa.f3liz.kotokoto-im` を実行してから起動する。
-2. 繰り返したくない場合は、自分用のコード署名証明書を作って署名を固定する。
+1. `tccutil reset Accessibility casa.f3liz.kotokoto-im` を実行してから、`build/kotokoto-im.app` を起動し、許可をオンにし直す。
+   または、システム設定 > プライバシーとセキュリティ > アクセシビリティ で kotokoto-im を削除(−)し、`build/kotokoto-im.app` を追加し直す。
+2. それでも残らないときは、自分用のコード署名証明書で署名を固定する。
    キーチェーンアクセス > 証明書アシスタント > 証明書を作成… で、種類を「コード署名」にして作り、`CODESIGN_IDENTITY="作った証明書の名前" scripts/bundle.sh` でビルドする。
 
 初回起動時に **アクセシビリティ**(場合により **入力監視**)の許可が必要です。メニューのリンクから設定画面を開けます。
