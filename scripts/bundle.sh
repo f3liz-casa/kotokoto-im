@@ -11,8 +11,11 @@ cd "$(dirname "$0")/.."
 CONFIG="${CONFIG:-release}"
 APP="build/kotokoto-im.app"
 
-swift build -c "$CONFIG"
-BIN="$(swift build -c "$CONFIG" --show-bin-path)/kotokoto-im"
+# SWIFT_BUILD_FLAGS: Homebrew のサンドボックス内では --disable-sandbox が要る (SwiftPM が入れ子で sandbox-exec を使えないため)
+# shellcheck disable=SC2086
+swift build -c "$CONFIG" ${SWIFT_BUILD_FLAGS:-}
+# shellcheck disable=SC2086
+BIN="$(swift build -c "$CONFIG" ${SWIFT_BUILD_FLAGS:-} --show-bin-path)/kotokoto-im"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"

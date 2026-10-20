@@ -7,6 +7,7 @@ class KotokotoIm < Formula
   depends_on xcode: ["14.0", :build]
 
   def install
+    ENV["SWIFT_BUILD_FLAGS"] = "--disable-sandbox"
     system "scripts/bundle.sh"
     prefix.install "build/kotokoto-im.app"
     bin.install_symlink prefix/"kotokoto-im.app/Contents/MacOS/kotokoto-im"
