@@ -18,11 +18,12 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN" "$APP/Contents/MacOS/kotokoto-im"
 cp packaging/Info.plist "$APP/Contents/Info.plist"
+# メニューに出すビルド番号。どのコミットから作ったかが分かるように git の短いハッシュを入れる
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(git rev-parse --short HEAD 2>/dev/null || echo dev)" "$APP/Contents/Info.plist"
 
-# 署名しないと権限の許可が安定しない。指定が無ければ ad-hoc 署名 (ビルドごとに署名が変わるので、
-# 再ビルド後は許可をやり直す必要がある。固定したい場合は自分の証明書名を CODESIGN_IDENTITY に)。
-# ad-hoc 署名のときは designated requirement を識別子だけにして、再ビルドしても同じアプリと見なされるか試す。
-# (許可が引き継がれるかは Mac での確認待ち。効かなければ従来どおり許可のやり直しが必要)
+# 署名しないと権限の許可が安定しない。指定が無ければ ad-hoc 署名。
+# designated requirement を識別子だけにしておくと、再ビルドしても同じアプリと見なされ、許可が引き継がれる
+# (cdhash ではなく識別子で照合されるため)。CODESIGN_IDENTITY を渡すと、その証明書で署名する。
 if [ -z "${CODESIGN_IDENTITY:-}" ]; then
     codesign --force --sign - --identifier casa.f3liz.kotokoto-im \
         -r='designated => identifier "casa.f3liz.kotokoto-im"' "$APP"
@@ -31,10 +32,10 @@ else
 fi
 
 if [ -z "${CODESIGN_IDENTITY:-}" ]; then
-    echo "注意: ad-hoc 署名です。再ビルドのたびに署名が変わるため、アクセシビリティの許可が無効になります。"
-    echo "      オンのままでも効かないときは、設定の一覧から kotokoto-im を削除(−)して追加し直すか、次を実行:"
+    echo "注意: ad-hoc 署名です (designated requirement は識別子 casa.f3liz.kotokoto-im のみ)。"
+    echo "      許可が効かなくなったときは、設定の一覧から kotokoto-im を削除(−)して追加し直すか、次を実行:"
     echo "        tccutil reset Accessibility casa.f3liz.kotokoto-im"
-    echo "      毎回やり直したくない場合は、自分のコード署名証明書を CODESIGN_IDENTITY に渡してください (README 参照)。"
+    echo "      (README 参照)"
 fi
 echo "できました: $APP"
 echo "起動: open $APP"

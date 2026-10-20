@@ -215,7 +215,12 @@ final class Controller: NSObject, NSApplicationDelegate {
         let openItem = NSMenuItem(title: "設定ファイルを開く", action: #selector(openConfig), keyEquivalent: ",")
         let quitItem = NSMenuItem(title: "kotokoto-im を終了", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         for i in [reloadItem, openItem] { i.target = self }
-        [reloadItem, openItem, .separator(), quitItem].forEach(menu.addItem)
+        // バージョンは bundle.sh が CFBundleVersion に git の短いハッシュを入れる (どのビルドか分かるように)
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        let versionItem = NSMenuItem(title: "バージョン \(version) (\(build))", action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        [reloadItem, openItem, .separator(), versionItem, quitItem].forEach(menu.addItem)
         item.menu = menu
     }
 
