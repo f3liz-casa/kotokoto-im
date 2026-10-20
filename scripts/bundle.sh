@@ -21,7 +21,14 @@ cp packaging/Info.plist "$APP/Contents/Info.plist"
 
 # 署名しないと権限の許可が安定しない。指定が無ければ ad-hoc 署名 (ビルドごとに署名が変わるので、
 # 再ビルド後は許可をやり直す必要がある。固定したい場合は自分の証明書名を CODESIGN_IDENTITY に)。
-codesign --force --sign "${CODESIGN_IDENTITY:--}" --identifier casa.f3liz.kotokoto-im "$APP"
+# ad-hoc 署名のときは designated requirement を識別子だけにして、再ビルドしても同じアプリと見なされるか試す。
+# (許可が引き継がれるかは Mac での確認待ち。効かなければ従来どおり許可のやり直しが必要)
+if [ -z "${CODESIGN_IDENTITY:-}" ]; then
+    codesign --force --sign - --identifier casa.f3liz.kotokoto-im \
+        -r='designated => identifier "casa.f3liz.kotokoto-im"' "$APP"
+else
+    codesign --force --sign "$CODESIGN_IDENTITY" --identifier casa.f3liz.kotokoto-im "$APP"
+fi
 
 if [ -z "${CODESIGN_IDENTITY:-}" ]; then
     echo "注意: ad-hoc 署名です。再ビルドのたびに署名が変わるため、アクセシビリティの許可が無効になります。"
